@@ -16,6 +16,7 @@ interface ChainSettingsModalProps {
     blockExplorerUrl?: string;
     blockExplorerApiUrl?: string;
     blockExplorerApiKey?: string;
+    faucetUrl?: string;
   }) => Promise<void>;
   onDelete: () => Promise<void>;
 }
@@ -33,6 +34,7 @@ export function ChainSettingsModal({
   const [blockExplorerUrl, setBlockExplorerUrl] = useState('');
   const [blockExplorerApiUrl, setBlockExplorerApiUrl] = useState('');
   const [blockExplorerApiKey, setBlockExplorerApiKey] = useState('');
+  const [faucetUrl, setFaucetUrl] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
@@ -47,6 +49,7 @@ export function ChainSettingsModal({
       setBlockExplorerUrl(chain.blockExplorerUrl || '');
       setBlockExplorerApiUrl(chain.blockExplorerApiUrl || '');
       setBlockExplorerApiKey(chain.blockExplorerApiKey || '');
+      setFaucetUrl(chain.faucetUrl || '');
     }
   }, [chain]);
 
@@ -82,6 +85,7 @@ export function ChainSettingsModal({
         blockExplorerUrl: blockExplorerUrl.trim() || undefined,
         blockExplorerApiUrl: blockExplorerApiUrl.trim() || undefined,
         blockExplorerApiKey: blockExplorerApiKey.trim() || undefined,
+        faucetUrl: faucetUrl.trim() || undefined,
       });
       onClose();
     } catch (err) {
@@ -183,6 +187,17 @@ export function ChainSettingsModal({
 
         <p className="text-xs text-coco-text-tertiary -mt-2">
           API key for Etherscan V2 API. Get one free at etherscan.io/apis
+        </p>
+
+        <Input
+          label="Faucet URL (optional)"
+          placeholder="https://faucet.sepolia.dev"
+          value={faucetUrl}
+          onChange={(e) => setFaucetUrl(e.target.value)}
+        />
+
+        <p className="text-xs text-coco-text-tertiary -mt-2">
+          URL to a faucet for getting testnet tokens
         </p>
 
         {/* Info */}

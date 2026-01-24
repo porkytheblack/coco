@@ -9,11 +9,12 @@ import { BlockchainCard } from './blockchain-card';
 
 interface BlockchainGridProps {
   chains: Chain[];
+  searchQuery?: string;
   onBlockchainClick: (blockchain: BlockchainDefinition) => void;
   onAddCustomChain: () => void;
 }
 
-export function BlockchainGrid({ chains, onBlockchainClick, onAddCustomChain }: BlockchainGridProps) {
+export function BlockchainGrid({ chains, searchQuery = '', onBlockchainClick, onAddCustomChain }: BlockchainGridProps) {
   // Count how many activated networks per blockchain
   const activatedCountByBlockchain = chains.reduce(
     (acc, chain) => {
@@ -27,13 +28,30 @@ export function BlockchainGrid({ chains, onBlockchainClick, onAddCustomChain }: 
   // Group custom chains separately
   const customChains = chains.filter((c) => c.isCustom);
 
+  // Filter blockchains by search query
+  const filteredRegistry = searchQuery
+    ? CHAIN_REGISTRY.filter(
+        (blockchain) =>
+          blockchain.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+          blockchain.ecosystem.toLowerCase().includes(searchQuery.toLowerCase()) ||
+          blockchain.nativeCurrency.toLowerCase().includes(searchQuery.toLowerCase())
+      )
+    : CHAIN_REGISTRY;
+
+  const filteredCustomChains = searchQuery
+    ? customChains.filter(
+        (chain) =>
+          chain.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+          chain.ecosystem.toLowerCase().includes(searchQuery.toLowerCase())
+      )
+    : customChains;
+
   return (
     <div className="space-y-8">
       {/* Main blockchains */}
       <div>
-        <h2 className="text-sm font-medium text-coco-text-secondary mb-4">Blockchains</h2>
-        <div className="flex flex-wrap gap-4">
-          {CHAIN_REGISTRY.map((blockchain) => (
+        <div className="flex flex-wrap gap-4 justify-center">
+          {filteredRegistry.map((blockchain) => (
             <BlockchainCard
               key={blockchain.id}
               blockchain={blockchain}
@@ -61,11 +79,11 @@ export function BlockchainGrid({ chains, onBlockchainClick, onAddCustomChain }: 
       </div>
 
       {/* Custom chains section (if any) */}
-      {customChains.length > 0 && (
+      {filteredCustomChains.length > 0 && (
         <div>
-          <h2 className="text-sm font-medium text-coco-text-secondary mb-4">Custom Chains</h2>
-          <div className="flex flex-wrap gap-4">
-            {customChains.map((chain) => (
+          <h2 className="text-sm font-medium text-coco-text-secondary mb-4 text-center">Custom Chains</h2>
+          <div className="flex flex-wrap gap-4 justify-center">
+            {filteredCustomChains.map((chain) => (
               <button
                 key={chain.id}
                 onClick={() => {

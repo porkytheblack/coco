@@ -47,11 +47,14 @@ pub async fn create_wallet(
     chain_id: String,
     name: String,
     wallet_type: WalletType,
+    address: Option<String>,
+    private_key: Option<String>,
+    public_key: Option<String>,
     state: State<'_, AppState>,
 ) -> Result<Wallet, String> {
     state
         .wallet_service
-        .create_wallet(&chain_id, &name, wallet_type)
+        .create_wallet(&chain_id, &name, wallet_type, address.as_deref(), private_key.as_deref(), public_key.as_deref())
         .await
         .map_err(|e| e.to_string())
 }

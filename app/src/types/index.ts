@@ -222,6 +222,7 @@ export interface DecodedEvent {
 
 // Request types
 export interface CreateChainRequest {
+  id?: string; // Optional chain ID (uses network.id from registry)
   name: string;
   ecosystem: Ecosystem;
   rpcUrl: string;
@@ -241,6 +242,7 @@ export interface CreateChainRequest {
 export interface CreateWalletRequest {
   chainId: string;
   name: string;
+  ecosystem?: Ecosystem;
 }
 
 export interface ImportWalletRequest {
@@ -282,4 +284,51 @@ export interface UpdateContractRequest {
 export interface ModalState {
   isOpen: boolean;
   type: 'settings' | 'addContract' | 'addChain' | 'addWallet' | null;
+}
+
+// AI Types
+export type AIProvider = 'openrouter' | 'anthropic' | 'openai' | 'google' | 'ollama' | 'lmstudio';
+
+export interface AIModelConfig {
+  provider: AIProvider;
+  modelId: string;
+  modelName: string;
+  apiKey?: string;
+  baseUrl?: string; // For Ollama/LMStudio
+}
+
+export interface AIProviderConfig {
+  provider: AIProvider;
+  apiKey?: string;
+  baseUrl?: string;
+  selectedModel?: string;
+}
+
+export interface AIMessage {
+  id: string;
+  role: 'user' | 'assistant';
+  content: string;
+  timestamp: string;
+}
+
+export interface AIConversation {
+  id: string;
+  messages: AIMessage[];
+  context?: AIContext;
+  createdAt: string;
+}
+
+export interface AIContext {
+  ecosystem?: Ecosystem;
+  chainId?: string;
+  contractId?: string;
+  transactionId?: string;
+  errorMessage?: string;
+  sourceCode?: string;
+}
+
+export interface AISettings {
+  enabled: boolean;
+  provider: AIProvider;
+  providers: Record<AIProvider, AIProviderConfig>;
 }

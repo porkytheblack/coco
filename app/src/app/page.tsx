@@ -1,15 +1,17 @@
 'use client';
 
 import { useEffect, useState, useCallback } from 'react';
-import { Settings, Plus, Play, Rocket, Copy, ExternalLink, Trash2, RefreshCw, ArrowUpRight, ArrowDownLeft } from 'lucide-react';
+import { Settings, Plus, Play, Rocket, Copy, ExternalLink, Trash2, RefreshCw, ArrowUpRight, ArrowDownLeft, Sun, Moon, Search, Send, Droplet } from 'lucide-react';
+import Image from 'next/image';
 import { TopBar } from '@/components/layout';
 import { IconButton, Button, StatusIndicator } from '@/components/ui';
-import { WalletList, AddWalletModal } from '@/components/wallets';
+import { WalletList, AddWalletModal, SendModal } from '@/components/wallets';
 import { WorkspaceGrid, CreateWorkspaceModal, WorkspaceSettingsModal } from '@/components/workspaces';
 import { AddChainModal, ChainSettingsModal, BlockchainGrid, NetworkSelectionModal } from '@/components/chains';
 import { ContractList, AddContractModal, EditContractModal, ContractPanel } from '@/components/contracts';
 import { TransactionPanel, CreateTransactionModal } from '@/components/transactions';
-import { useChainStore, useWalletStore, useWorkspaceStore, useToastStore } from '@/stores';
+import { AISettingsModal, CocoChatModal } from '@/components/ai';
+import { useChainStore, useWalletStore, useWorkspaceStore, useToastStore, useThemeStore, useAIStore } from '@/stores';
 import { openExternal } from '@/lib/tauri/commands';
 import { clsx } from 'clsx';
 import type { BlockchainDefinition, NetworkDefinition } from '@/data/chain-registry';
@@ -40,6 +42,7 @@ export default function AppPage() {
   const [showAddWallet, setShowAddWallet] = useState(false);
   const [showCreateWorkspace, setShowCreateWorkspace] = useState(false);
   const [copiedAddress, setCopiedAddress] = useState(false);
+  const [showSendModal, setShowSendModal] = useState(false);
 
   // Workspace state
   const {
@@ -67,6 +70,13 @@ export default function AppPage() {
   const [showSettings, setShowSettings] = useState(false);
   const [showCreateTransaction, setShowCreateTransaction] = useState(false);
   const [selectedContract, setSelectedContract] = useState<typeof contracts[0] | null>(null);
+
+  // AI and theme state
+  const { theme, toggleTheme } = useThemeStore();
+  const { settings: aiSettings } = useAIStore();
+  const [showAISettings, setShowAISettings] = useState(false);
+  const [showCocoChat, setShowCocoChat] = useState(false);
+  const [chainSearch, setChainSearch] = useState('');
 
   // Load chains on mount
   useEffect(() => {
@@ -114,6 +124,7 @@ export default function AppPage() {
   // Handle activating a network from the modal
   const handleActivateNetwork = async (blockchain: BlockchainDefinition, network: NetworkDefinition) => {
     await addChain({
+      id: network.id, // Use the network ID from the registry to avoid duplicates
       name: `${blockchain.name} ${network.name}`,
       ecosystem: blockchain.ecosystem,
       rpcUrl: network.rpcUrl,
@@ -134,11 +145,75 @@ export default function AppPage() {
   if (appState.view === 'chains') {
     return (
       <div className="min-h-screen flex flex-col">
-        <TopBar title="Coco" subtitle="Select a blockchain to get started" />
+        {/* Drag region for transparent title bar */}
+        <div className="h-8 drag-region flex-shrink-0" />
+        <main className="flex-1 flex flex-col items-center p-6 pt-8">
+          {/* Logo */}
+          <div className="mb-8">
+            <Image
+              src="/brand/coco.png"
+              alt="Coco"
+              width={120}
+              height={120}
+              className="mx-auto"
+              priority
+            />
+          </div>
 
-        <main className="flex-1 p-6">
+          {/* Search and Actions Row */}
+          <div className="w-full max-w-2xl mb-8 no-drag">
+            <div className="flex items-center gap-3">
+              {/* Search Input */}
+              <div className="flex-1 relative">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-coco-text-tertiary" />
+                <input
+                  type="text"
+                  value={chainSearch}
+                  onChange={(e) => setChainSearch(e.target.value)}
+                  placeholder="Search blockchains..."
+                  className="w-full pl-10 pr-4 py-2.5 text-sm bg-coco-bg-secondary border border-coco-border-default rounded-lg focus:outline-none focus:ring-2 focus:ring-coco-accent placeholder:text-coco-text-tertiary"
+                />
+              </div>
+
+              {/* Theme Toggle */}
+              <button
+                onClick={toggleTheme}
+                className="p-2.5 rounded-lg bg-coco-bg-secondary border border-coco-border-default hover:bg-coco-bg-tertiary transition-colors"
+                title={theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'}
+              >
+                {theme === 'dark' ? (
+                  <Sun className="w-5 h-5 text-coco-text-secondary" />
+                ) : (
+                  <Moon className="w-5 h-5 text-coco-text-secondary" />
+                )}
+              </button>
+
+              {/* AI Settings (Coco's Paw) */}
+              <button
+                onClick={() => setShowAISettings(true)}
+                className={clsx(
+                  'p-2 rounded-lg border transition-colors',
+                  aiSettings.enabled
+                    ? 'bg-coco-accent/10 border-coco-accent/30 hover:bg-coco-accent/20'
+                    : 'bg-coco-bg-secondary border-coco-border-default hover:bg-coco-bg-tertiary'
+                )}
+                title="AI Settings"
+              >
+                <Image
+                  src="/brand/coco-paw.png"
+                  alt="AI Settings"
+                  width={20}
+                  height={20}
+                  className={aiSettings.enabled ? '' : 'opacity-50'}
+                />
+              </button>
+            </div>
+          </div>
+
+          {/* Blockchain Grid */}
           <BlockchainGrid
             chains={chains}
+            searchQuery={chainSearch}
             onBlockchainClick={(blockchain) => {
               setSelectedBlockchain(blockchain);
               setShowNetworkModal(true);
@@ -170,6 +245,16 @@ export default function AppPage() {
             await addChain(req);
           }}
         />
+
+        <AISettingsModal
+          isOpen={showAISettings}
+          onClose={() => setShowAISettings(false)}
+        />
+
+        <CocoChatModal
+          isOpen={showCocoChat}
+          onClose={() => setShowCocoChat(false)}
+        />
       </div>
     );
   }
@@ -196,6 +281,7 @@ export default function AppPage() {
           subtitle={getSubtitle()}
           showBack
           onBack={handleBack}
+          onCocoChat={() => setShowCocoChat(true)}
           actions={
             <IconButton
               icon={<Settings className="w-5 h-5" />}
@@ -262,6 +348,7 @@ export default function AppPage() {
                     blockExplorerUrl: updates.blockExplorerUrl,
                     blockExplorerApiUrl: updates.blockExplorerApiUrl,
                     blockExplorerApiKey: updates.blockExplorerApiKey,
+                    faucetUrl: updates.faucetUrl,
                   });
                   addToast({
                     type: 'success',
@@ -282,6 +369,12 @@ export default function AppPage() {
             />
           </>
         )}
+
+        <CocoChatModal
+          isOpen={showCocoChat}
+          onClose={() => setShowCocoChat(false)}
+          context={{ ecosystem: selectedChain?.ecosystem, chainId: selectedChain?.id }}
+        />
       </div>
     );
   }
@@ -341,6 +434,7 @@ export default function AppPage() {
           subtitle={`${wallet.address.slice(0, 6)}...${wallet.address.slice(-4)}`}
           showBack
           onBack={handleBack}
+          onCocoChat={() => setShowCocoChat(true)}
           actions={
             <>
               <Button
@@ -405,6 +499,29 @@ export default function AppPage() {
                 >
                   <ExternalLink className="w-4 h-4 text-coco-text-tertiary" />
                 </a>
+              )}
+            </div>
+
+            {/* Action Buttons */}
+            <div className="flex gap-3 mt-4">
+              <Button
+                variant="primary"
+                size="sm"
+                onClick={() => setShowSendModal(true)}
+              >
+                <Send className="w-4 h-4 mr-2" />
+                Send
+              </Button>
+              {selectedChain?.faucetUrl && (
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  onClick={() => openExternal(selectedChain.faucetUrl!)}
+                >
+                  <Droplet className="w-4 h-4 mr-2" />
+                  Faucet
+                  <ExternalLink className="w-3 h-3 ml-1.5 opacity-60" />
+                </Button>
               )}
             </div>
           </div>
@@ -501,6 +618,25 @@ export default function AppPage() {
             )}
           </div>
         </main>
+
+        <CocoChatModal
+          isOpen={showCocoChat}
+          onClose={() => setShowCocoChat(false)}
+          context={{ ecosystem: selectedChain?.ecosystem, chainId: selectedChain?.id }}
+        />
+
+        {selectedChain && (
+          <SendModal
+            isOpen={showSendModal}
+            wallet={wallet}
+            chain={selectedChain}
+            onClose={() => setShowSendModal(false)}
+            onSuccess={(txHash) => {
+              addToast({ type: 'success', title: 'Transaction sent', message: `TX: ${txHash.slice(0, 10)}...` });
+              refreshBalance(wallet.id);
+            }}
+          />
+        )}
       </div>
     );
   }
@@ -517,6 +653,7 @@ export default function AppPage() {
           title={currentWorkspace?.name || 'Loading...'}
           showBack
           onBack={handleBack}
+          onCocoChat={() => setShowCocoChat(true)}
           actions={
             <>
               <IconButton
@@ -689,6 +826,12 @@ export default function AppPage() {
           onCreate={async (name, contractId, functionName) => {
             await createTransaction(name, contractId, functionName);
           }}
+        />
+
+        <CocoChatModal
+          isOpen={showCocoChat}
+          onClose={() => setShowCocoChat(false)}
+          context={{ ecosystem: selectedChain?.ecosystem, chainId: selectedChain?.id }}
         />
       </div>
     );

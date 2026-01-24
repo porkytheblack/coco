@@ -177,9 +177,15 @@ impl WalletService {
         chain_id: &str,
         name: &str,
         _wallet_type: WalletType,
+        address: Option<&str>,
+        private_key: Option<&str>,
+        public_key: Option<&str>,
     ) -> Result<Wallet> {
-        // Generate random bytes first (before any awaits to avoid Send issues)
-        let (address, public_key) = {
+        // Use provided address/keys from frontend SDK, or generate random (fallback)
+        let (wallet_address, wallet_public_key) = if let (Some(addr), Some(pubkey)) = (address, public_key) {
+            (addr.to_string(), pubkey.to_string())
+        } else {
+            // Fallback: Generate random bytes (not recommended - frontend should use SDK)
             let mut rng = rand::thread_rng();
             let mut address_bytes = [0u8; 20];
             let mut pubkey_bytes = [0u8; 32];
@@ -191,11 +197,18 @@ impl WalletService {
             )
         };
 
+        // Encrypt private key if provided
+        let encrypted_private_key = if let Some(pk) = private_key {
+            Some(encrypt_private_key(pk)?)
+        } else {
+            None
+        };
+
         let wallet = Wallet {
             id: Uuid::new_v4().to_string(),
             chain_id: chain_id.to_string(),
             name: name.to_string(),
-            address: address.clone(),
+            address: wallet_address.clone(),
             wallet_type: WalletType::Local,
             balance: None,
             created_at: Utc::now(),
@@ -203,16 +216,17 @@ impl WalletService {
 
         sqlx::query(
             r#"
-            INSERT INTO wallets (id, chain_id, name, address, public_key, wallet_type)
-            VALUES (?, ?, ?, ?, ?, ?)
+            INSERT INTO wallets (id, chain_id, name, address, public_key, wallet_type, encrypted_private_key)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
             "#,
         )
         .bind(&wallet.id)
         .bind(&wallet.chain_id)
         .bind(&wallet.name)
         .bind(&wallet.address)
-        .bind(&public_key)
+        .bind(&wallet_public_key)
         .bind("local")
+        .bind(&encrypted_private_key)
         .execute(&self.db)
         .await
         .map_err(|e| CocoError::Database(e.to_string()))?;

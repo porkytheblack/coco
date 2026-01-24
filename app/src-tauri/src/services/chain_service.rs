@@ -20,7 +20,7 @@ impl ChainService {
 
     pub async fn list_chains(&self) -> Result<Vec<Chain>> {
         let rows = sqlx::query_as::<_, ChainRow>(
-            "SELECT id, name, ecosystem, rpc_url, explorer_url, explorer_api_url, explorer_api_key, is_testnet, currency_symbol, currency_decimals, blockchain, network_type, is_custom, icon_id FROM chains ORDER BY name"
+            "SELECT id, name, ecosystem, rpc_url, chain_id_numeric, explorer_url, explorer_api_url, explorer_api_key, faucet_url, is_testnet, currency_symbol, currency_decimals, blockchain, network_type, is_custom, icon_id FROM chains ORDER BY name"
         )
         .fetch_all(&self.db)
         .await
@@ -31,7 +31,7 @@ impl ChainService {
 
     pub async fn get_chain(&self, id: &str) -> Result<Chain> {
         let row = sqlx::query_as::<_, ChainRow>(
-            "SELECT id, name, ecosystem, rpc_url, explorer_url, explorer_api_url, explorer_api_key, is_testnet, currency_symbol, currency_decimals, blockchain, network_type, is_custom, icon_id FROM chains WHERE id = ?"
+            "SELECT id, name, ecosystem, rpc_url, chain_id_numeric, explorer_url, explorer_api_url, explorer_api_key, faucet_url, is_testnet, currency_symbol, currency_decimals, blockchain, network_type, is_custom, icon_id FROM chains WHERE id = ?"
         )
         .bind(id)
         .fetch_optional(&self.db)
@@ -45,17 +45,19 @@ impl ChainService {
     pub async fn create_chain(&self, chain: Chain) -> Result<Chain> {
         sqlx::query(
             r#"
-            INSERT INTO chains (id, name, ecosystem, rpc_url, explorer_url, explorer_api_url, explorer_api_key, is_testnet, currency_symbol, currency_decimals, blockchain, network_type, is_custom, icon_id)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            INSERT INTO chains (id, name, ecosystem, rpc_url, chain_id_numeric, explorer_url, explorer_api_url, explorer_api_key, faucet_url, is_testnet, currency_symbol, currency_decimals, blockchain, network_type, is_custom, icon_id)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             "#,
         )
         .bind(&chain.id)
         .bind(&chain.name)
         .bind(ecosystem_to_string(&chain.ecosystem))
         .bind(&chain.rpc_url)
+        .bind(chain.chain_id_numeric.map(|v| v as i64))
         .bind(&chain.explorer_url)
         .bind(&chain.explorer_api_url)
         .bind(&chain.explorer_api_key)
+        .bind(&chain.faucet_url)
         .bind(chain.is_testnet as i32)
         .bind(&chain.currency_symbol)
         .bind(chain.currency_decimals as i32)
@@ -74,16 +76,18 @@ impl ChainService {
         let result = sqlx::query(
             r#"
             UPDATE chains
-            SET name = ?, ecosystem = ?, rpc_url = ?, explorer_url = ?, explorer_api_url = ?, explorer_api_key = ?, is_testnet = ?, currency_symbol = ?, currency_decimals = ?, blockchain = ?, network_type = ?, is_custom = ?, icon_id = ?
+            SET name = ?, ecosystem = ?, rpc_url = ?, chain_id_numeric = ?, explorer_url = ?, explorer_api_url = ?, explorer_api_key = ?, faucet_url = ?, is_testnet = ?, currency_symbol = ?, currency_decimals = ?, blockchain = ?, network_type = ?, is_custom = ?, icon_id = ?
             WHERE id = ?
             "#,
         )
         .bind(&updated.name)
         .bind(ecosystem_to_string(&updated.ecosystem))
         .bind(&updated.rpc_url)
+        .bind(updated.chain_id_numeric.map(|v| v as i64))
         .bind(&updated.explorer_url)
         .bind(&updated.explorer_api_url)
         .bind(&updated.explorer_api_key)
+        .bind(&updated.faucet_url)
         .bind(updated.is_testnet as i32)
         .bind(&updated.currency_symbol)
         .bind(updated.currency_decimals as i32)
@@ -138,9 +142,11 @@ struct ChainRow {
     name: String,
     ecosystem: String,
     rpc_url: String,
+    chain_id_numeric: Option<i64>,
     explorer_url: Option<String>,
     explorer_api_url: Option<String>,
     explorer_api_key: Option<String>,
+    faucet_url: Option<String>,
     is_testnet: i32,
     currency_symbol: String,
     currency_decimals: i32,
@@ -157,9 +163,11 @@ impl From<ChainRow> for Chain {
             name: row.name,
             ecosystem: string_to_ecosystem(&row.ecosystem),
             rpc_url: row.rpc_url,
+            chain_id_numeric: row.chain_id_numeric.map(|v| v as u64),
             explorer_url: row.explorer_url,
             explorer_api_url: row.explorer_api_url,
             explorer_api_key: row.explorer_api_key,
+            faucet_url: row.faucet_url,
             is_testnet: row.is_testnet != 0,
             currency_symbol: row.currency_symbol,
             currency_decimals: row.currency_decimals as u8,

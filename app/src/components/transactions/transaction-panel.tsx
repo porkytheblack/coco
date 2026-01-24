@@ -4,6 +4,7 @@ import { useState, useEffect, useRef, useCallback } from 'react';
 import { Play, Loader2, CheckCircle, XCircle, Copy, ExternalLink, Clock, ChevronDown, ChevronRight, Trash2 } from 'lucide-react';
 import { clsx } from 'clsx';
 import { Button } from '@/components/ui';
+import { ErrorExplanation } from '@/components/ai';
 import { useToastStore, useWorkspaceStore } from '@/stores';
 import type { Transaction, TransactionRun, WalletWithBalance, TxStatus, Ecosystem, AccountRequirement, PdaSeed } from '@/types';
 import { truncateAddress, truncateHash, formatBalance } from '@/lib/utils/format';
@@ -557,6 +558,11 @@ export function TransactionPanel({
               <pre className="text-xs text-coco-error/90 whitespace-pre-wrap break-words font-mono bg-coco-error/5 p-2 rounded max-h-48 overflow-y-auto">
                 {error}
               </pre>
+              {/* AI Error Explanation */}
+              <ErrorExplanation
+                errorMessage={error}
+                context={{ ecosystem }}
+              />
             </div>
           </div>
         </div>
@@ -739,6 +745,11 @@ export function TransactionPanel({
                           <pre className="text-xs text-coco-error/90 whitespace-pre-wrap break-words font-mono max-h-32 overflow-y-auto">
                             {run.errorMessage}
                           </pre>
+                          {/* AI Error Explanation */}
+                          <ErrorExplanation
+                            errorMessage={run.errorMessage}
+                            context={{ ecosystem }}
+                          />
                         </div>
                       )}
 

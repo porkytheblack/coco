@@ -155,6 +155,7 @@ export function AddWalletModal({
         await onCreate({
           chainId,
           name: name.trim(),
+          ecosystem,
         });
       } else {
         await onImport({

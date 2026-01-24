@@ -145,9 +145,11 @@ export const useChainStore = create<ChainState>((set, get) => ({
             id,
             updates.name || existingChain.name,
             updates.rpcUrl || existingChain.rpcUrl,
+            updates.chainIdNumeric,
             updates.blockExplorerUrl,
             updates.blockExplorerApiUrl,
-            updates.blockExplorerApiKey
+            updates.blockExplorerApiKey,
+            updates.faucetUrl
           );
         } else {
           console.error('[updateChain store] Chain not found in local state:', id);

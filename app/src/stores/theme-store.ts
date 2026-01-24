@@ -2,6 +2,7 @@ import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 
 type Theme = 'light' | 'dark' | 'system';
+type TauriTheme = 'light' | 'dark';
 
 interface ThemeState {
   theme: Theme;
@@ -37,17 +38,32 @@ export const useThemeStore = create<ThemeState>()(
   )
 );
 
+async function setTauriTheme(theme: TauriTheme) {
+  try {
+    // Dynamically import Tauri API to avoid SSR issues
+    const { getCurrentWindow } = await import('@tauri-apps/api/window');
+    const window = getCurrentWindow();
+    await window.setTheme(theme);
+  } catch {
+    // Not running in Tauri or API not available
+  }
+}
+
 function applyTheme(theme: Theme) {
   if (typeof window === 'undefined') return;
 
   const root = document.documentElement;
   const systemDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+  const isDark = theme === 'dark' || (theme === 'system' && systemDark);
 
-  if (theme === 'dark' || (theme === 'system' && systemDark)) {
+  if (isDark) {
     root.classList.add('dark');
   } else {
     root.classList.remove('dark');
   }
+
+  // Update Tauri window theme for native title bar
+  setTauriTheme(isDark ? 'dark' : 'light');
 }
 
 // Initialize theme on load

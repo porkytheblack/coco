@@ -1,13 +1,17 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { FileCode } from 'lucide-react';
+import { FileCode, Sparkles, Loader2 } from 'lucide-react';
+import Image from 'next/image';
 import { Button, Input, Modal } from '@/components/ui';
 import { MoveDefinitionBuilder } from './move-definition-builder';
+import { useAIStore } from '@/stores';
+import { aiService } from '@/lib/ai';
 import type { InterfaceType, AddContractRequest, MoveDefinition, ContractWithChain } from '@/types';
 import * as tauri from '@/lib/tauri';
 
 type ContractMode = 'new' | 'reuse';
+type MoveInputMode = 'manual' | 'ai';
 type AnchorIdlVersion = 'legacy' | 'new';
 
 // Example IDL placeholders for different Anchor versions
@@ -79,6 +83,14 @@ export function AddContractModal({
   });
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  // AI state
+  const { settings: aiSettings } = useAIStore();
+  const [moveInputMode, setMoveInputMode] = useState<MoveInputMode>('manual');
+  const [moveSourceCode, setMoveSourceCode] = useState('');
+  const [evmSourceCode, setEvmSourceCode] = useState('');
+  const [isAIProcessing, setIsAIProcessing] = useState(false);
+  const [aiError, setAIError] = useState<string | null>(null);
 
   // Reuse mode state
   const [reusableContracts, setReusableContracts] = useState<ContractWithChain[]>([]);
@@ -254,7 +266,65 @@ export function AddContractModal({
     setError(null);
     setSelectedContractId(null);
     setReusableContracts([]);
+    setMoveInputMode('manual');
+    setMoveSourceCode('');
+    setEvmSourceCode('');
+    setAIError(null);
     onClose();
+  };
+
+  // AI: Parse Move module source code
+  const handleAIParseMove = async () => {
+    if (!moveSourceCode.trim() || !aiSettings.enabled) return;
+
+    setIsAIProcessing(true);
+    setAIError(null);
+
+    try {
+      const currentConfig = aiSettings.providers[aiSettings.provider];
+      aiService.setAdapter(aiSettings.provider, currentConfig);
+      const result = await aiService.parseMoveModule(moveSourceCode);
+
+      if (result.success && result.definition) {
+        // Only set the module name and functions/structs, not the address
+        setMoveDefinition({
+          ...result.definition,
+          moduleAddress: moveDefinition.moduleAddress || '', // Keep existing address or empty
+        });
+        setMoveInputMode('manual'); // Switch to manual mode to show the result
+      } else {
+        setAIError(result.error || 'Failed to parse Move module');
+      }
+    } catch (err) {
+      setAIError(err instanceof Error ? err.message : 'Failed to analyze Move module');
+    } finally {
+      setIsAIProcessing(false);
+    }
+  };
+
+  // AI: Generate ABI from EVM source code
+  const handleAIGenerateABI = async () => {
+    if (!evmSourceCode.trim() || !aiSettings.enabled) return;
+
+    setIsAIProcessing(true);
+    setAIError(null);
+
+    try {
+      const currentConfig = aiSettings.providers[aiSettings.provider];
+      aiService.setAdapter(aiSettings.provider, currentConfig);
+      const result = await aiService.generateABI(evmSourceCode);
+
+      if (result.success && result.abi) {
+        setAbiJson(JSON.stringify(result.abi, null, 2));
+        setEvmSourceCode(''); // Clear source after successful generation
+      } else {
+        setAIError(result.error || 'Failed to generate ABI');
+      }
+    } catch (err) {
+      setAIError(err instanceof Error ? err.message : 'Failed to generate ABI');
+    } finally {
+      setIsAIProcessing(false);
+    }
   };
 
   const getEcosystemLabel = () => {
@@ -442,18 +512,79 @@ export function AddContractModal({
             {/* Interface input based on ecosystem */}
             {ecosystem === 'evm' && (
               <div>
-                <label className="block text-sm font-medium text-coco-text-primary mb-1.5">
-                  ABI (JSON)
-                </label>
-                <textarea
-                  value={abiJson}
-                  onChange={(e) => setAbiJson(e.target.value)}
-                  placeholder='[{"type":"function","name":"transfer",...}]'
-                  className="w-full h-40 px-3 py-2 text-sm font-mono bg-coco-bg-primary border border-coco-border-default rounded-md focus:outline-none focus:ring-2 focus:ring-coco-accent resize-none"
-                />
-                <p className="mt-1 text-xs text-coco-text-tertiary">
-                  Paste the contract ABI JSON array from your compiled contract or block explorer.
-                </p>
+                <div className="flex items-center justify-between mb-1.5">
+                  <label className="block text-sm font-medium text-coco-text-primary">
+                    ABI (JSON)
+                  </label>
+                  {aiSettings.enabled && (
+                    <button
+                      type="button"
+                      onClick={() => setEvmSourceCode(evmSourceCode ? '' : ' ')} // Toggle source input visibility
+                      className="flex items-center gap-1 text-xs text-coco-accent hover:underline"
+                    >
+                      <Sparkles className="w-3 h-3" />
+                      {evmSourceCode ? 'Paste ABI' : 'Generate from source'}
+                    </button>
+                  )}
+                </div>
+
+                {evmSourceCode ? (
+                  <div className="space-y-3">
+                    <p className="text-xs text-coco-text-tertiary">
+                      Paste your Solidity source code and let Coco generate the ABI.
+                    </p>
+                    <textarea
+                      value={evmSourceCode}
+                      onChange={(e) => setEvmSourceCode(e.target.value)}
+                      placeholder={`// SPDX-License-Identifier: MIT
+pragma solidity ^0.8.0;
+
+contract Token {
+    mapping(address => uint256) public balances;
+
+    function transfer(address to, uint256 amount) external returns (bool) {
+        // ...
+    }
+}`}
+                      className="w-full h-40 px-3 py-2 text-sm font-mono bg-coco-bg-primary border border-coco-border-default rounded-md focus:outline-none focus:ring-2 focus:ring-coco-accent resize-none"
+                      disabled={isAIProcessing}
+                    />
+                    {aiError && (
+                      <p className="text-xs text-coco-error">{aiError}</p>
+                    )}
+                    <Button
+                      type="button"
+                      variant="secondary"
+                      onClick={handleAIGenerateABI}
+                      disabled={!evmSourceCode.trim() || isAIProcessing}
+                      className="w-full"
+                    >
+                      {isAIProcessing ? (
+                        <>
+                          <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                          Generating...
+                        </>
+                      ) : (
+                        <>
+                          <Image src="/brand/coco-paw.png" alt="" width={16} height={16} className="mr-2" />
+                          Generate ABI with Coco
+                        </>
+                      )}
+                    </Button>
+                  </div>
+                ) : (
+                  <>
+                    <textarea
+                      value={abiJson}
+                      onChange={(e) => setAbiJson(e.target.value)}
+                      placeholder='[{"type":"function","name":"transfer",...}]'
+                      className="w-full h-40 px-3 py-2 text-sm font-mono bg-coco-bg-primary border border-coco-border-default rounded-md focus:outline-none focus:ring-2 focus:ring-coco-accent resize-none"
+                    />
+                    <p className="mt-1 text-xs text-coco-text-tertiary">
+                      Paste the contract ABI JSON array from your compiled contract or block explorer.
+                    </p>
+                  </>
+                )}
               </div>
             )}
 
@@ -493,16 +624,80 @@ export function AddContractModal({
 
             {ecosystem === 'aptos' && (
               <div>
-                <label className="block text-sm font-medium text-coco-text-primary mb-1.5">
-                  Move Module Definition
-                </label>
-                <p className="mb-3 text-xs text-coco-text-tertiary">
-                  Define the module's functions and structs manually since Move doesn't have a standard ABI format.
-                </p>
-                <MoveDefinitionBuilder
-                  value={moveDefinition}
-                  onChange={setMoveDefinition}
-                />
+                <div className="flex items-center justify-between mb-1.5">
+                  <label className="block text-sm font-medium text-coco-text-primary">
+                    Move Module Definition
+                  </label>
+                  {aiSettings.enabled && (
+                    <button
+                      type="button"
+                      onClick={() => setMoveInputMode(moveInputMode === 'manual' ? 'ai' : 'manual')}
+                      className="flex items-center gap-1 text-xs text-coco-accent hover:underline"
+                    >
+                      <Sparkles className="w-3 h-3" />
+                      {moveInputMode === 'manual' ? 'Import with AI' : 'Manual entry'}
+                    </button>
+                  )}
+                </div>
+
+                {moveInputMode === 'ai' ? (
+                  <div className="space-y-3">
+                    <p className="text-xs text-coco-text-tertiary">
+                      Paste your Move module source code and let Coco extract the definitions automatically.
+                    </p>
+                    <textarea
+                      value={moveSourceCode}
+                      onChange={(e) => setMoveSourceCode(e.target.value)}
+                      placeholder={`module my_module::example {
+    struct MyStruct has key {
+        value: u64
+    }
+
+    public entry fun initialize(account: &signer) {
+        // ...
+    }
+
+    public fun get_value(addr: address): u64 {
+        // ...
+    }
+}`}
+                      className="w-full h-48 px-3 py-2 text-sm font-mono bg-coco-bg-primary border border-coco-border-default rounded-md focus:outline-none focus:ring-2 focus:ring-coco-accent resize-none"
+                      disabled={isAIProcessing}
+                    />
+                    {aiError && (
+                      <p className="text-xs text-coco-error">{aiError}</p>
+                    )}
+                    <Button
+                      type="button"
+                      variant="secondary"
+                      onClick={handleAIParseMove}
+                      disabled={!moveSourceCode.trim() || isAIProcessing}
+                      className="w-full"
+                    >
+                      {isAIProcessing ? (
+                        <>
+                          <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                          Analyzing...
+                        </>
+                      ) : (
+                        <>
+                          <Image src="/brand/coco-paw.png" alt="" width={16} height={16} className="mr-2" />
+                          Analyze with Coco
+                        </>
+                      )}
+                    </Button>
+                  </div>
+                ) : (
+                  <>
+                    <p className="mb-3 text-xs text-coco-text-tertiary">
+                      Define the module's functions and structs manually since Move doesn't have a standard ABI format.
+                    </p>
+                    <MoveDefinitionBuilder
+                      value={moveDefinition}
+                      onChange={setMoveDefinition}
+                    />
+                  </>
+                )}
               </div>
             )}
           </>

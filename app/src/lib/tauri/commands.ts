@@ -1,6 +1,6 @@
 import { invoke } from '@tauri-apps/api/core';
 import { open } from '@tauri-apps/plugin-shell';
-import { ethers } from 'ethers';
+import { generateWallet, deriveWalletFromPrivateKey } from '@/lib/wallet/generator';
 import type {
   Chain,
   Wallet,
@@ -56,19 +56,23 @@ export async function updateChain(
   chainId: string,
   name: string,
   rpcUrl: string,
+  chainIdNumeric?: number,
   explorerUrl?: string,
   explorerApiUrl?: string,
-  explorerApiKey?: string
+  explorerApiKey?: string,
+  faucetUrl?: string
 ): Promise<Chain> {
   if (!checkIsTauri()) throw new Error('Not running in Tauri');
-  console.log('[updateChain] Invoking with:', { chainId, name, rpcUrl, explorerUrl, explorerApiUrl, explorerApiKey: explorerApiKey ? '***' : undefined });
+  console.log('[updateChain] Invoking with:', { chainId, name, rpcUrl, chainIdNumeric, explorerUrl, explorerApiUrl, explorerApiKey: explorerApiKey ? '***' : undefined, faucetUrl });
   return invoke<Chain>('update_chain', {
     chainId,
     name,
     rpcUrl,
+    chainIdNumeric,
     explorerUrl,
     explorerApiUrl,
     explorerApiKey,
+    faucetUrl,
   });
 }
 
@@ -96,10 +100,18 @@ export async function getWallet(walletId: string): Promise<Wallet> {
 
 export async function createWallet(request: CreateWalletRequest): Promise<Wallet> {
   if (!checkIsTauri()) throw new Error('Not running in Tauri');
+
+  // Generate wallet using the appropriate SDK based on ecosystem
+  const ecosystem = request.ecosystem || 'evm';
+  const generated = generateWallet(ecosystem);
+
   return invoke<Wallet>('create_wallet', {
     chainId: request.chainId,
     name: request.name,
-    walletType: 'local', // Default wallet type
+    walletType: 'local',
+    address: generated.address,
+    privateKey: generated.privateKey,
+    publicKey: generated.publicKey,
   });
 }
 
@@ -112,26 +124,13 @@ export async function importWallet(request: ImportWalletRequest): Promise<Wallet
   const ecosystem = request.ecosystem || 'evm';
 
   if (!address && privateKey) {
-    // Derive address from private key based on ecosystem
-    if (ecosystem === 'evm') {
-      // EVM: Use ethers.js to derive address
-      const pk = privateKey.startsWith('0x') ? privateKey : `0x${privateKey}`;
-      try {
-        const wallet = new ethers.Wallet(pk);
-        address = wallet.address;
-        privateKey = pk; // Normalize with 0x prefix
-      } catch (error) {
-        throw new Error(`Invalid EVM private key: ${(error as Error).message}`);
-      }
-    } else if (ecosystem === 'solana') {
-      // Solana: Private key is base58 encoded, address derivation happens on frontend adapter
-      // For now, require address to be provided for Solana wallets
-      // In future, we can derive from base58 keypair
-      throw new Error('Solana wallets require an address. Please provide the public key as the address.');
-    } else if (ecosystem === 'aptos') {
-      // Aptos: Private key is hex encoded, address derivation similar to EVM
-      // For now, require address to be provided
-      throw new Error('Aptos wallets require an address. Please provide the account address.');
+    // Derive address from private key using the appropriate SDK
+    try {
+      const derived = deriveWalletFromPrivateKey(privateKey, ecosystem);
+      address = derived.address;
+      privateKey = derived.privateKey; // Normalized format
+    } catch (error) {
+      throw new Error(`Invalid ${ecosystem.toUpperCase()} private key: ${(error as Error).message}`);
     }
   }
 

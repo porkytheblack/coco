@@ -191,6 +191,34 @@ async fn run_migrations(pool: &DbPool) -> Result<(), sqlx::Error> {
             .ok();
     }
 
+    // Migration: Add faucet_url field to chains
+    let columns: Vec<(String,)> = sqlx::query_as(
+        "SELECT name FROM pragma_table_info('chains') WHERE name = 'faucet_url'"
+    )
+    .fetch_all(pool)
+    .await?;
+
+    if columns.is_empty() {
+        sqlx::query("ALTER TABLE chains ADD COLUMN faucet_url TEXT")
+            .execute(pool)
+            .await
+            .ok();
+    }
+
+    // Migration: Add chain_id_numeric field to chains
+    let columns: Vec<(String,)> = sqlx::query_as(
+        "SELECT name FROM pragma_table_info('chains') WHERE name = 'chain_id_numeric'"
+    )
+    .fetch_all(pool)
+    .await?;
+
+    if columns.is_empty() {
+        sqlx::query("ALTER TABLE chains ADD COLUMN chain_id_numeric INTEGER")
+            .execute(pool)
+            .await
+            .ok();
+    }
+
     // Migration: Add interface_type field to contracts (for Solana IDL / Aptos Move support)
     let columns: Vec<(String,)> = sqlx::query_as(
         "SELECT name FROM pragma_table_info('contracts') WHERE name = 'interface_type'"

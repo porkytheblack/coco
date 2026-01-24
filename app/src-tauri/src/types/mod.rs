@@ -113,12 +113,14 @@ pub struct Chain {
     pub name: String,
     pub ecosystem: Ecosystem,
     pub rpc_url: String,
+    pub chain_id_numeric: Option<u64>,
     #[serde(rename = "blockExplorerUrl")]
     pub explorer_url: Option<String>,
     #[serde(rename = "blockExplorerApiUrl")]
     pub explorer_api_url: Option<String>,
     #[serde(rename = "blockExplorerApiKey")]
     pub explorer_api_key: Option<String>,
+    pub faucet_url: Option<String>,
     pub is_testnet: bool,
     #[serde(rename = "nativeCurrency")]
     pub currency_symbol: String,
