@@ -72,7 +72,30 @@ export function WalletDetailModal({
 
   const openInExplorer = () => {
     if (blockExplorerUrl) {
-      window.open(`${blockExplorerUrl}/address/${wallet.address}`, '_blank');
+      const isTestnet = blockExplorerUrl.includes('testnet') ||
+        blockExplorerUrl.includes('devnet') ||
+        blockExplorerUrl.includes('sepolia') ||
+        blockExplorerUrl.includes('goerli');
+
+      // Determine environment based on URL
+      let environment: 'aptos' | 'solana' | 'evm' = 'evm';
+      if (blockExplorerUrl.includes('aptos')) {
+        environment = 'aptos';
+      } else if (blockExplorerUrl.includes('solana')) {
+        environment = 'solana';
+      }
+
+      // Build the appropriate URL based on environment
+      let explorerUrl = blockExplorerUrl;
+      if (environment === 'aptos') {
+        explorerUrl = `${blockExplorerUrl}/account/${wallet.address}${isTestnet ? '?network=testnet' : ''}`;
+      } else if (environment === 'solana') {
+        explorerUrl = `${blockExplorerUrl}/address/${wallet.address}${isTestnet ? '?cluster=devnet' : ''}`;
+      } else {
+        explorerUrl = `${blockExplorerUrl}/address/${wallet.address}`;
+      }
+
+      window.open(explorerUrl, '_blank');
     }
   };
 

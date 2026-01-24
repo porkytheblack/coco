@@ -1,15 +1,42 @@
 import { Aptos, AptosConfig, Network } from '@aptos-labs/ts-sdk';
 import type { ChainAdapter, CallResult, WalletBalance } from './types';
-import type { Contract, ContractFunction, MoveFunction, WalletTransaction } from '@/types';
+import type { Chain, Contract, ContractFunction, MoveFunction, WalletTransaction } from '@/types';
 
 const OCTAS_PER_APT = 100_000_000;
 
-function getNetworkFromRPC(rpcUrl: string) {
+export function getNetworkFromRPC(rpcUrl: string) {
   console.log("rpcUrl::", rpcUrl);
   return rpcUrl.includes("mainnet") ? Network.MAINNET : rpcUrl.includes("devnet") ? Network.DEVNET : Network.TESTNET
 }
 
-function formatPriv(priv: string) {
+export function getExplorerUrl(selectedChain: Chain, address: string){
+
+  let blockExplorerUrl = selectedChain.blockExplorerUrl ?? ""
+  let rpcUrl = selectedChain.rpcUrl
+  const network = rpcUrl.includes("testnet") ? "testnet" : rpcUrl.includes("devnet") ? "devnet" : "mainnet"
+
+      // Determine environment based on URL
+      let environment: 'aptos' | 'solana' | 'evm' = 'evm';
+      if (blockExplorerUrl.includes('aptos')) {
+        environment = 'aptos';
+      } else if (blockExplorerUrl.includes('solana')) {
+        environment = 'solana';
+      }
+
+      // Build the appropriate URL based on environment
+      let explorerUrl = blockExplorerUrl;
+      if (environment === 'aptos') {
+        explorerUrl = `${blockExplorerUrl}/account/${address}${network == "testnet" ? '?network=testnet' : ''}`;
+      } else if (environment === 'solana') {
+        explorerUrl = `${blockExplorerUrl}/address/${address}${network == "devnet" ? '?cluster=devnet' : ''}`;
+      } else {
+        explorerUrl = `${blockExplorerUrl}/address/${address}`;
+      }
+
+      return explorerUrl
+}
+
+export function formatPriv(priv: string) {
   return priv.startsWith("ed25519-priv-") ? priv : ("ed25519-priv-" + priv)
 }
 

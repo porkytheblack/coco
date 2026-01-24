@@ -3,10 +3,11 @@
  */
 import { ethers } from 'ethers';
 import { Connection, PublicKey, SystemProgram, Transaction, Keypair, LAMPORTS_PER_SOL, sendAndConfirmTransaction } from '@solana/web3.js';
-import { Aptos, AptosConfig, Network, Account, Ed25519PrivateKey } from '@aptos-labs/ts-sdk';
+import { Aptos, AptosConfig, Network, Account, Ed25519PrivateKey, AccountAddress } from '@aptos-labs/ts-sdk';
 import bs58 from 'bs58';
 import type { Chain } from '@/types';
 import { getWalletPrivateKey } from '@/lib/tauri/commands';
+import { formatPriv, getNetworkFromRPC } from '../adapters/aptos-adapter';
 
 interface SendTransactionParams {
   walletId: string;
@@ -113,35 +114,29 @@ async function sendAptosTransaction(
   chain: Chain
 ): Promise<string> {
   // Determine network from chain info
-  let network = Network.DEVNET;
-  if (chain.networkType === 'mainnet') {
-    network = Network.MAINNET;
-  } else if (chain.networkType === 'testnet') {
-    network = Network.TESTNET;
-  }
+  let network = getNetworkFromRPC(chain.rpcUrl)
 
   const config = new AptosConfig({
-    network,
-    fullnode: chain.rpcUrl,
+    network
   });
   const aptos = new Aptos(config);
 
   // Create account from private key
-  const pkHex = privateKey.startsWith('0x') ? privateKey : `0x${privateKey}`;
+  const pkHex = formatPriv(privateKey);
   const pk = new Ed25519PrivateKey(pkHex);
   const account = Account.fromPrivateKey({ privateKey: pk });
+  console.log("got account ok")
 
   // Convert amount to octas (1 APT = 1e8 octas)
   const octas = Math.floor(parseFloat(amount) * 1e8);
 
   // Build and submit the transaction
-  const transaction = await aptos.transaction.build.simple({
-    sender: account.accountAddress,
-    data: {
-      function: '0x1::aptos_account::transfer',
-      functionArguments: [recipient, octas],
-    },
-  });
+  const transaction = await aptos.transferFungibleAsset({
+    sender: account,
+    amount: octas,
+    fungibleAssetMetadataAddress: "0xa",
+    recipient: AccountAddress.fromString(recipient)
+  })
 
   // Sign and submit
   const pendingTransaction = await aptos.signAndSubmitTransaction({

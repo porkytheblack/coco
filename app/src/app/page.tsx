@@ -15,6 +15,7 @@ import { useChainStore, useWalletStore, useWorkspaceStore, useToastStore, useThe
 import { openExternal } from '@/lib/tauri/commands';
 import { clsx } from 'clsx';
 import type { BlockchainDefinition, NetworkDefinition } from '@/data/chain-registry';
+import { getExplorerUrl } from '@/lib/adapters/aptos-adapter';
 
 type View = 'chains' | 'chain-dashboard' | 'wallet-detail' | 'workspace';
 
@@ -427,6 +428,8 @@ export default function AppPage() {
       return `${prefix}${numValue.toFixed(4)} ETH`;
     };
 
+    const explorerUrl = selectedChain && wallet.address ? getExplorerUrl(selectedChain, wallet.address) : undefined;
+
     return (
       <div className="min-h-screen flex flex-col">
         <TopBar
@@ -491,7 +494,7 @@ export default function AppPage() {
               </button>
               {selectedChain?.blockExplorerUrl && (
                 <a
-                  href={`${selectedChain.blockExplorerUrl}/address/${wallet.address}`}
+                  href={explorerUrl}
                   target="_blank"
                   rel="noopener noreferrer"
                   className="p-2 hover:bg-coco-bg-secondary rounded transition-colors"
