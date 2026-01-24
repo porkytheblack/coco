@@ -1,0 +1,173 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  /* Tokyo Night Dark Mode - Default for landing page */
+  --coco-bg-primary: #1A1B26;
+  --coco-bg-secondary: #16161E;
+  --coco-bg-tertiary: #232433;
+  --coco-bg-elevated: #1F2030;
+
+  --coco-border-subtle: #292E42;
+  --coco-border-default: #3B4261;
+  --coco-border-strong: #545C7E;
+
+  --coco-text-primary: #C0CAF5;
+  --coco-text-secondary: #A9B1D6;
+  --coco-text-tertiary: #565F89;
+  --coco-text-inverse: #1A1B26;
+
+  --coco-accent: #7AA2F7;
+  --coco-accent-hover: #89B4FA;
+  --coco-accent-subtle: #283457;
+
+  --coco-success: #9ECE6A;
+  --coco-success-subtle: #1E3A2F;
+  --coco-error: #F7768E;
+  --coco-error-subtle: #3D2030;
+  --coco-warning: #E0AF68;
+  --coco-warning-subtle: #3D3020;
+  --coco-pending: #A9B1D6;
+  --coco-pending-subtle: #292E42;
+
+  /* Semi-transparent backgrounds for dark mode */
+  --coco-card-bg: rgba(31, 32, 48, 0.5);
+  --coco-glass-bg: rgba(31, 32, 48, 0.8);
+  --coco-accent-border-hover: rgba(122, 162, 247, 0.5);
+  --coco-accent-shadow: rgba(122, 162, 247, 0.05);
+}
+
+.light {
+  /* Tokyo Night Light Mode */
+  --coco-bg-primary: #E8E9ED;
+  --coco-bg-secondary: #DFE0E5;
+  --coco-bg-tertiary: #D5D6DB;
+  --coco-bg-elevated: #F5F5F7;
+
+  --coco-border-subtle: #C8C9CE;
+  --coco-border-default: #A8A9AE;
+  --coco-border-strong: #888890;
+
+  --coco-text-primary: #1A1B26;
+  --coco-text-secondary: #4C505E;
+  --coco-text-tertiary: #787C87;
+  --coco-text-inverse: #F5F5F7;
+
+  --coco-accent: #2E5AAC;
+  --coco-accent-hover: #1E4A9C;
+  --coco-accent-subtle: #D4E0F5;
+
+  --coco-success: #2D7A6E;
+  --coco-success-subtle: #D4F0EA;
+  --coco-error: #C53D4D;
+  --coco-error-subtle: #F5D4D8;
+  --coco-warning: #B87815;
+  --coco-warning-subtle: #F5E8D4;
+  --coco-pending: #6A6E7A;
+  --coco-pending-subtle: #DFE0E5;
+
+  /* Semi-transparent backgrounds for light mode */
+  --coco-card-bg: rgba(255, 255, 255, 0.7);
+  --coco-glass-bg: rgba(255, 255, 255, 0.85);
+  --coco-accent-border-hover: rgba(46, 90, 172, 0.5);
+  --coco-accent-shadow: rgba(46, 90, 172, 0.08);
+}
+
+@layer base {
+  html {
+    @apply bg-coco-bg-primary scroll-smooth;
+  }
+
+  body {
+    @apply bg-coco-bg-primary text-coco-text-primary;
+    font-family: 'Sora', -apple-system, BlinkMacSystemFont, sans-serif;
+  }
+
+  * {
+    @apply border-coco-border-subtle;
+  }
+}
+
+@layer components {
+  .btn {
+    @apply inline-flex items-center justify-center px-6 py-3 text-sm font-medium rounded-lg transition-all duration-200;
+  }
+
+  .btn-primary {
+    @apply bg-coco-accent text-coco-text-inverse hover:bg-coco-accent-hover hover:scale-105 shadow-lg hover:shadow-xl;
+  }
+
+  .btn-secondary {
+    @apply bg-coco-bg-tertiary text-coco-text-primary hover:bg-coco-border-subtle border border-coco-border-default;
+  }
+
+  .btn-ghost {
+    @apply bg-transparent text-coco-text-secondary hover:text-coco-text-primary hover:bg-coco-bg-tertiary;
+  }
+
+  .card {
+    @apply bg-coco-bg-elevated border border-coco-border-subtle rounded-xl transition-all duration-300;
+  }
+
+  .card:hover {
+    @apply border-coco-border-default shadow-lg transform -translate-y-1;
+  }
+
+  .feature-card {
+    @apply backdrop-blur-sm border border-coco-border-subtle rounded-2xl p-6 transition-all duration-300;
+    background-color: var(--coco-card-bg);
+  }
+
+  .feature-card:hover {
+    @apply shadow-xl transform -translate-y-2;
+    border-color: var(--coco-accent-border-hover);
+    box-shadow: 0 25px 50px -12px var(--coco-accent-shadow);
+  }
+
+  .gradient-text {
+    @apply bg-gradient-to-r from-coco-accent via-[#BB9AF7] to-coco-success bg-clip-text text-transparent;
+  }
+
+  .section-title {
+    @apply text-3xl md:text-4xl font-bold text-coco-text-primary mb-4;
+  }
+
+  .section-subtitle {
+    @apply text-lg text-coco-text-secondary max-w-2xl mx-auto;
+  }
+}
+
+@layer utilities {
+  .glass {
+    @apply backdrop-blur-md;
+    background-color: var(--coco-glass-bg);
+  }
+
+  .glow {
+    box-shadow: 0 0 60px rgba(122, 162, 247, 0.15);
+  }
+
+  .glow-accent {
+    box-shadow: 0 0 40px rgba(122, 162, 247, 0.2);
+  }
+}
+
+/* Custom scrollbar */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: var(--coco-bg-secondary);
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--coco-border-default);
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--coco-border-strong);
+}
