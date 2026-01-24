@@ -124,22 +124,31 @@ export default function AppPage() {
 
   // Handle activating a network from the modal
   const handleActivateNetwork = async (blockchain: BlockchainDefinition, network: NetworkDefinition) => {
-    await addChain({
-      id: network.id, // Use the network ID from the registry to avoid duplicates
-      name: `${blockchain.name} ${network.name}`,
-      ecosystem: blockchain.ecosystem,
-      rpcUrl: network.rpcUrl,
-      chainIdNumeric: network.chainIdNumeric,
-      currencySymbol: blockchain.nativeCurrency,
-      blockExplorerUrl: network.blockExplorerUrl,
-      blockExplorerApiUrl: network.blockExplorerApiUrl,
-      faucetUrl: network.faucetUrl,
-      blockchain: blockchain.id,
-      networkType: network.networkType,
-      isCustom: false,
-      iconId: blockchain.iconId,
-    });
-    addToast({ type: 'success', title: `${blockchain.name} ${network.name} activated` });
+    try {
+      await addChain({
+        id: network.id, // Use the network ID from the registry to avoid duplicates
+        name: `${blockchain.name} ${network.name}`,
+        ecosystem: blockchain.ecosystem,
+        rpcUrl: network.rpcUrl,
+        chainIdNumeric: network.chainIdNumeric,
+        currencySymbol: blockchain.nativeCurrency,
+        blockExplorerUrl: network.blockExplorerUrl,
+        blockExplorerApiUrl: network.blockExplorerApiUrl,
+        faucetUrl: network.faucetUrl,
+        blockchain: blockchain.id,
+        networkType: network.networkType,
+        isCustom: false,
+        iconId: blockchain.iconId,
+      });
+      addToast({ type: 'success', title: `${blockchain.name} ${network.name} activated` });
+    } catch (error) {
+      addToast({ 
+        type: 'error', 
+        title: 'Failed to activate network', 
+        message: error instanceof Error ? error.message : 'Unknown error' 
+      });
+      console.error('Error activating network:', error);
+    }
   };
 
   // Chain Selection View

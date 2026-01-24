@@ -27,7 +27,11 @@ pub async fn init_db(app_data_dir: PathBuf) -> Result<DbPool, sqlx::Error> {
 
 /// Run database migrations
 async fn run_migrations(pool: &DbPool) -> Result<(), sqlx::Error> {
-    // First, run schema migrations for existing tables (add missing columns)
+    // IMPORTANT: Create tables FIRST before running migrations
+    // This ensures tables exist on fresh install before we try to alter them
+    create_tables(pool).await?;
+
+    // Now run schema migrations for existing tables (add missing columns)
     // SQLite doesn't support ADD COLUMN IF NOT EXISTS, so we check manually
 
     // Migration: Add encrypted_private_key to wallets
@@ -261,6 +265,11 @@ async fn run_migrations(pool: &DbPool) -> Result<(), sqlx::Error> {
             .ok();
     }
 
+    Ok(())
+}
+
+/// Create database tables (called before migrations)
+async fn create_tables(pool: &DbPool) -> Result<(), sqlx::Error> {
     sqlx::query(
         r#"
         -- Chains table
