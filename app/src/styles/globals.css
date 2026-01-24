@@ -1,0 +1,203 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  /* Light Mode */
+  --coco-bg-primary: #FFFFFF;
+  --coco-bg-secondary: #F9FAFB;
+  --coco-bg-tertiary: #F3F4F6;
+  --coco-bg-elevated: #FFFFFF;
+
+  --coco-border-subtle: #E5E7EB;
+  --coco-border-default: #D1D5DB;
+  --coco-border-strong: #9CA3AF;
+
+  --coco-text-primary: #111827;
+  --coco-text-secondary: #4B5563;
+  --coco-text-tertiary: #9CA3AF;
+  --coco-text-inverse: #FFFFFF;
+
+  --coco-accent: #2563EB;
+  --coco-accent-hover: #1D4ED8;
+  --coco-accent-subtle: #EFF6FF;
+
+  --coco-success: #059669;
+  --coco-success-subtle: #ECFDF5;
+  --coco-error: #DC2626;
+  --coco-error-subtle: #FEF2F2;
+  --coco-warning: #D97706;
+  --coco-warning-subtle: #FFFBEB;
+  --coco-pending: #6B7280;
+  --coco-pending-subtle: #F3F4F6;
+
+  --coco-shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.05);
+  --coco-shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+  --coco-shadow-lg: 0 10px 15px -3px rgba(0, 0, 0, 0.1);
+  --coco-shadow-drawer: -4px 0 24px rgba(0, 0, 0, 0.12);
+}
+
+.dark {
+  /* Dark Mode */
+  --coco-bg-primary: #0F0F0F;
+  --coco-bg-secondary: #171717;
+  --coco-bg-tertiary: #262626;
+  --coco-bg-elevated: #1C1C1C;
+
+  --coco-border-subtle: #262626;
+  --coco-border-default: #404040;
+  --coco-border-strong: #525252;
+
+  --coco-text-primary: #FAFAFA;
+  --coco-text-secondary: #A3A3A3;
+  --coco-text-tertiary: #525252;
+  --coco-text-inverse: #0F0F0F;
+
+  --coco-accent: #3B82F6;
+  --coco-accent-hover: #60A5FA;
+  --coco-accent-subtle: #1E3A5F;
+
+  --coco-success: #10B981;
+  --coco-success-subtle: #064E3B;
+  --coco-error: #EF4444;
+  --coco-error-subtle: #7F1D1D;
+  --coco-warning: #F59E0B;
+  --coco-warning-subtle: #78350F;
+  --coco-pending: #9CA3AF;
+  --coco-pending-subtle: #374151;
+
+  --coco-shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.3);
+  --coco-shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.4);
+  --coco-shadow-lg: 0 10px 15px -3px rgba(0, 0, 0, 0.5);
+  --coco-shadow-drawer: -4px 0 24px rgba(0, 0, 0, 0.5);
+}
+
+@layer base {
+  body {
+    @apply bg-coco-bg-primary text-coco-text-primary;
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+  }
+
+  * {
+    @apply border-coco-border-subtle;
+  }
+}
+
+@layer components {
+  /* Badge variants */
+  .badge {
+    @apply inline-flex items-center px-2 py-1 text-xs font-medium rounded-full;
+  }
+
+  .badge-wallet {
+    @apply bg-coco-accent-subtle text-coco-accent;
+  }
+
+  .badge-contract {
+    @apply bg-coco-bg-tertiary text-coco-text-secondary;
+  }
+
+  .badge-success {
+    @apply bg-coco-success-subtle text-coco-success;
+  }
+
+  .badge-error {
+    @apply bg-coco-error-subtle text-coco-error;
+  }
+
+  .badge-pending {
+    @apply bg-coco-pending-subtle text-coco-pending;
+  }
+
+  .badge-cancelled {
+    @apply border border-coco-border-default text-coco-text-tertiary bg-transparent;
+  }
+
+  /* Card styles */
+  .card {
+    @apply bg-coco-bg-elevated border border-coco-border-subtle rounded-lg transition-all duration-base;
+  }
+
+  .card:hover {
+    @apply border-coco-border-default shadow-sm;
+  }
+
+  /* Button base */
+  .btn {
+    @apply inline-flex items-center justify-center px-4 py-2 text-sm font-medium rounded-md transition-all duration-base;
+  }
+
+  .btn-primary {
+    @apply bg-coco-accent text-coco-text-inverse hover:bg-coco-accent-hover;
+  }
+
+  .btn-secondary {
+    @apply bg-coco-bg-tertiary text-coco-text-primary hover:bg-coco-border-subtle;
+  }
+
+  .btn-danger {
+    @apply bg-coco-error text-coco-text-inverse hover:bg-red-700;
+  }
+
+  .btn-ghost {
+    @apply bg-transparent text-coco-text-secondary hover:bg-coco-bg-tertiary;
+  }
+
+  /* Icon button */
+  .icon-btn {
+    @apply w-9 h-9 flex items-center justify-center rounded-md bg-transparent hover:bg-coco-bg-tertiary transition-all duration-base;
+  }
+
+  /* Input styles */
+  .input {
+    @apply w-full px-3 py-2 text-sm bg-coco-bg-primary border border-coco-border-default rounded-md
+           focus:outline-none focus:ring-2 focus:ring-coco-accent focus:border-transparent
+           placeholder:text-coco-text-tertiary;
+  }
+
+  /* Terminal output */
+  .terminal {
+    @apply font-mono text-sm bg-[#1a1a1a] text-[#e5e5e5] p-4 rounded-lg leading-relaxed overflow-auto;
+  }
+
+  /* Sidebar list item */
+  .sidebar-item {
+    @apply px-4 py-3 border-b border-coco-border-subtle cursor-pointer transition-all duration-base;
+  }
+
+  .sidebar-item:hover {
+    @apply bg-coco-bg-secondary;
+  }
+
+  .sidebar-item.selected {
+    @apply bg-coco-bg-tertiary border-l-2 border-l-coco-accent;
+  }
+}
+
+@layer utilities {
+  /* Focus ring */
+  .focus-ring {
+    @apply focus:outline-none focus:ring-2 focus:ring-coco-accent focus:ring-offset-2;
+  }
+
+  /* Status dot */
+  .status-dot {
+    @apply w-2 h-2 rounded-full;
+  }
+
+  .status-dot-success {
+    @apply bg-coco-success;
+  }
+
+  .status-dot-error {
+    @apply bg-coco-error;
+  }
+
+  .status-dot-pending {
+    @apply bg-coco-pending animate-pulse;
+  }
+
+  .status-dot-running {
+    @apply bg-coco-accent animate-pulse;
+  }
+}

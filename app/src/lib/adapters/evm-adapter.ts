@@ -1,0 +1,399 @@
+import { ethers } from 'ethers';
+import type { ChainAdapter, CallResult, WalletBalance } from './types';
+import type { Contract, ContractFunction, WalletTransaction } from '@/types';
+
+interface ABIItem {
+  type: string;
+  name?: string;
+  inputs?: { name: string; type: string }[];
+  outputs?: { name: string; type: string }[];
+  stateMutability?: string;
+}
+
+export const evmAdapter: ChainAdapter = {
+  ecosystem: 'evm',
+
+  parseInterface(contract: Contract): ContractFunction[] {
+    if (!contract.abi || !Array.isArray(contract.abi)) return [];
+
+    return (contract.abi as ABIItem[])
+      .filter((item) => item.type === 'function')
+      .map((item) => ({
+        name: item.name || '',
+        type:
+          item.stateMutability === 'view' || item.stateMutability === 'pure'
+            ? 'read'
+            : 'write',
+        inputs:
+          item.inputs?.map((i) => ({ name: i.name, type: i.type })) || [],
+        outputs:
+          item.outputs?.map((o) => ({ name: o.name, type: o.type })) || [],
+        stateMutability: item.stateMutability,
+      }));
+  },
+
+  async call(
+    rpcUrl,
+    contractAddress,
+    functionName,
+    args,
+    contractInterface
+  ): Promise<CallResult> {
+    try {
+      const provider = new ethers.JsonRpcProvider(rpcUrl);
+      const contract = new ethers.Contract(
+        contractAddress,
+        contractInterface as ethers.InterfaceAbi,
+        provider
+      );
+      const result = await contract[functionName](...args);
+
+      // Handle BigInt serialization
+      const serializedResult = serializeResult(result);
+      return { success: true, data: serializedResult };
+    } catch (error) {
+      return { success: false, error: (error as Error).message };
+    }
+  },
+
+  async sendTransaction(
+    rpcUrl,
+    contractAddress,
+    functionName,
+    args,
+    contractInterface,
+    privateKey,
+    options
+  ): Promise<CallResult> {
+    try {
+      const provider = new ethers.JsonRpcProvider(rpcUrl);
+      const wallet = new ethers.Wallet(privateKey, provider);
+      const contract = new ethers.Contract(
+        contractAddress,
+        contractInterface as ethers.InterfaceAbi,
+        wallet
+      );
+
+      const txOptions: Record<string, unknown> = {};
+      if (options?.value) {
+        txOptions.value = ethers.parseEther(options.value);
+      }
+      if (options?.gasLimit) {
+        txOptions.gasLimit = BigInt(options.gasLimit);
+      }
+
+      const tx = await contract[functionName](...args, txOptions);
+      const receipt = await tx.wait();
+
+      const events = receipt.logs
+        .map((log: ethers.Log) => {
+          try {
+            const parsed = contract.interface.parseLog({
+              topics: log.topics as string[],
+              data: log.data,
+            });
+            return {
+              name: parsed?.name || 'Unknown',
+              args: parsed?.args
+                ? Object.fromEntries(
+                    Object.entries(parsed.args).filter(
+                      ([key]) => isNaN(Number(key))
+                    )
+                  )
+                : {},
+            };
+          } catch {
+            return null;
+          }
+        })
+        .filter(Boolean);
+
+      return {
+        success: true,
+        txHash: receipt.hash,
+        blockNumber: receipt.blockNumber,
+        gasUsed: receipt.gasUsed.toString(),
+        events,
+      };
+    } catch (error) {
+      // Extract detailed error information
+      let errorMessage = (error as Error).message;
+
+      // Try to get revert reason from ethers error
+      const ethersError = error as {
+        code?: string;
+        reason?: string;
+        data?: string;
+        shortMessage?: string;
+        info?: { error?: { message?: string; data?: string } };
+      };
+
+      if (ethersError.reason) {
+        errorMessage = ethersError.reason;
+      } else if (ethersError.shortMessage) {
+        errorMessage = ethersError.shortMessage;
+      }
+
+      // Check for nested error info (common with ethers v6)
+      if (ethersError.info?.error?.message) {
+        errorMessage = ethersError.info.error.message;
+      }
+
+      // Add error code if available
+      if (ethersError.code) {
+        errorMessage = `[${ethersError.code}] ${errorMessage}`;
+      }
+
+      console.error('[evmAdapter.sendTransaction] Error:', error);
+      return { success: false, error: errorMessage };
+    }
+  },
+
+  isValidAddress(address: string): boolean {
+    return ethers.isAddress(address);
+  },
+
+  async getBalance(rpcUrl: string, address: string, nativeSymbol: string): Promise<WalletBalance> {
+    try {
+      const provider = new ethers.JsonRpcProvider(rpcUrl);
+      // Use getAddress to normalize the address and prevent ENS resolution attempts
+      // This ensures we always pass a valid checksummed address
+      const checksummedAddress = ethers.getAddress(address);
+      const balance = await provider.getBalance(checksummedAddress);
+
+      return {
+        native: balance.toString(),
+        nativeFormatted: ethers.formatEther(balance),
+        nativeDecimals: 18,
+        nativeSymbol,
+      };
+    } catch (error) {
+      console.error('Failed to fetch balance:', error);
+      return {
+        native: '0',
+        nativeFormatted: '0',
+        nativeDecimals: 18,
+        nativeSymbol,
+      };
+    }
+  },
+
+  async getTransactionHistory(
+    rpcUrl: string,
+    address: string,
+    blockExplorerApiUrl?: string,
+    blockExplorerApiKey?: string
+  ): Promise<WalletTransaction[]> {
+    // Normalize address to checksummed format for consistent comparison
+    const checksummedAddress = ethers.getAddress(address);
+
+    // Use block explorer API (Etherscan-compatible)
+    if (!blockExplorerApiUrl) {
+      const apiUrl = detectBlockExplorerApi(rpcUrl);
+      if (!apiUrl) {
+        console.warn('[getTransactionHistory] No block explorer API available for RPC:', rpcUrl);
+        return [];
+      }
+      blockExplorerApiUrl = apiUrl;
+    }
+
+    console.log('[getTransactionHistory] Using block explorer API:', blockExplorerApiUrl, 'with API key:', blockExplorerApiKey ? 'yes' : 'no');
+
+    try {
+      // Get chain ID from RPC for V2 API
+      const chainId = await getChainId(rpcUrl);
+
+      // Use Etherscan V2 unified API endpoint
+      let url = `https://api.etherscan.io/v2/api?chainid=${chainId}&module=account&action=txlist&address=${checksummedAddress}&startblock=0&endblock=99999999&page=1&offset=50&sort=desc`;
+
+      // Add API key if provided
+      if (blockExplorerApiKey) {
+        url += `&apikey=${blockExplorerApiKey}`;
+      }
+
+      console.log('[getTransactionHistory] Using V2 API with chainId:', chainId);
+
+      const response = await fetch(url);
+      const data = await response.json();
+
+      console.log('[getTransactionHistory] Response status:', data.status, 'message:', data.message, 'result count:', Array.isArray(data.result) ? data.result.length : typeof data.result);
+
+      if (data.status !== '1' || !data.result || !Array.isArray(data.result)) {
+        // Common error: "NOTOK" with result containing error message
+        // This usually means rate limiting or missing API key
+        if (data.message === 'NOTOK' && typeof data.result === 'string') {
+          console.warn('[getTransactionHistory] API error:', data.result);
+        } else if (data.message) {
+          console.warn('[getTransactionHistory] API returned:', data.message);
+        }
+        return [];
+      }
+
+      return data.result.map((tx: EtherscanTx) => ({
+        id: tx.hash,
+        walletId: '',
+        txHash: tx.hash,
+        type: getTransactionType(tx, checksummedAddress),
+        from: tx.from,
+        to: tx.to,
+        value: tx.value,
+        gasUsed: parseInt(tx.gasUsed, 10),
+        fee: (BigInt(tx.gasUsed) * BigInt(tx.gasPrice)).toString(),
+        status: tx.isError === '0' ? 'success' : 'failed',
+        blockNumber: parseInt(tx.blockNumber, 10),
+        timestamp: new Date(parseInt(tx.timeStamp, 10) * 1000).toISOString(),
+        methodName: tx.functionName || undefined,
+      }));
+    } catch (error) {
+      console.error('[getTransactionHistory] Failed to fetch:', error);
+      return [];
+    }
+  },
+};
+
+// Etherscan API response type
+interface EtherscanTx {
+  hash: string;
+  from: string;
+  to: string;
+  value: string;
+  gasUsed: string;
+  gasPrice: string;
+  isError: string;
+  blockNumber: string;
+  timeStamp: string;
+  functionName?: string;
+  input?: string;
+}
+
+function getTransactionType(
+  tx: EtherscanTx,
+  walletAddress: string
+): 'send' | 'receive' | 'contract_call' | 'contract_deploy' {
+  const isFromWallet = tx.from.toLowerCase() === walletAddress.toLowerCase();
+  const isToWallet = tx.to?.toLowerCase() === walletAddress.toLowerCase();
+
+  // Contract deployment (no 'to' address)
+  if (!tx.to || tx.to === '') {
+    return 'contract_deploy';
+  }
+
+  // Contract call (has input data beyond '0x')
+  if (tx.input && tx.input !== '0x' && tx.input.length > 10) {
+    return 'contract_call';
+  }
+
+  // Simple transfer
+  if (isFromWallet) {
+    return 'send';
+  }
+
+  if (isToWallet) {
+    return 'receive';
+  }
+
+  return 'send';
+}
+
+// Get chain ID from RPC endpoint
+async function getChainId(rpcUrl: string): Promise<number> {
+  try {
+    const response = await fetch(rpcUrl, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        id: 1,
+        jsonrpc: '2.0',
+        method: 'eth_chainId',
+        params: [],
+      }),
+    });
+    const data = await response.json();
+    if (data.result) {
+      return parseInt(data.result, 16);
+    }
+  } catch (error) {
+    console.error('[getChainId] Failed to get chain ID:', error);
+  }
+  return 1; // Default to Ethereum mainnet
+}
+
+// Detect block explorer API URL from RPC URL
+function detectBlockExplorerApi(rpcUrl: string): string | null {
+  const url = rpcUrl.toLowerCase();
+
+  // Check more specific chains FIRST before generic checks
+
+  // Base Sepolia (check before generic Sepolia)
+  if (url.includes('base') && url.includes('sepolia')) {
+    return 'https://api-sepolia.basescan.org/api';
+  }
+
+  // Base Mainnet
+  if (url.includes('base') || url.includes('mainnet.base.org')) {
+    return 'https://api.basescan.org/api';
+  }
+
+  // Arbitrum Sepolia (check before generic Sepolia)
+  if (url.includes('arbitrum') && url.includes('sepolia')) {
+    return 'https://api-sepolia.arbiscan.io/api';
+  }
+
+  // Arbitrum One
+  if (url.includes('arb1') || url.includes('arbitrum')) {
+    return 'https://api.arbiscan.io/api';
+  }
+
+  // Optimism Sepolia (check before generic Sepolia)
+  if (url.includes('optimism') && url.includes('sepolia')) {
+    return 'https://api-sepolia-optimistic.etherscan.io/api';
+  }
+
+  // Optimism Mainnet
+  if (url.includes('optimism')) {
+    return 'https://api-optimistic.etherscan.io/api';
+  }
+
+  // Polygon Amoy (testnet)
+  if (url.includes('amoy')) {
+    return 'https://api-amoy.polygonscan.com/api';
+  }
+
+  // Polygon Mainnet
+  if (url.includes('polygon')) {
+    return 'https://api.polygonscan.com/api';
+  }
+
+  // Ethereum Sepolia (generic - check after all specific sepolia chains)
+  if (url.includes('sepolia')) {
+    return 'https://api-sepolia.etherscan.io/api';
+  }
+
+  // Goerli (deprecated but still used)
+  if (url.includes('goerli')) {
+    return 'https://api-goerli.etherscan.io/api';
+  }
+
+  // Ethereum Mainnet (last resort for eth/infura URLs)
+  if (url.includes('mainnet') || url.includes('infura') || url.includes('eth.')) {
+    return 'https://api.etherscan.io/api';
+  }
+
+  return null;
+}
+
+// Helper to serialize BigInt values
+function serializeResult(value: unknown): unknown {
+  if (typeof value === 'bigint') {
+    return value.toString();
+  }
+  if (Array.isArray(value)) {
+    return value.map(serializeResult);
+  }
+  if (value && typeof value === 'object') {
+    return Object.fromEntries(
+      Object.entries(value).map(([k, v]) => [k, serializeResult(v)])
+    );
+  }
+  return value;
+}
