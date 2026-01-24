@@ -12,6 +12,9 @@ use std::sync::Arc;
 use tauri::Manager;
 use tokio::sync::RwLock;
 
+#[cfg(target_os = "macos")]
+use tauri_plugin_decorum::WebviewWindowExt;
+
 /// Application state that holds all services
 pub struct AppState {
     pub db_pool: DbPool,
@@ -47,6 +50,8 @@ impl AppState {
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
+        .plugin(tauri_plugin_decorum::init())
+        .plugin(tauri_plugin_http::init())
         .plugin(tauri_plugin_shell::init())
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_fs::init())
@@ -68,6 +73,15 @@ pub fn run() {
             });
 
             app.manage(app_state);
+
+            // Configure macOS window for transparent title bar
+            #[cfg(target_os = "macos")]
+            {
+                let main_window = app.get_webview_window("main").unwrap();
+                main_window.create_overlay_titlebar().unwrap();
+                main_window.set_traffic_lights_inset(16.0, 20.0).unwrap();
+            }
+
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![

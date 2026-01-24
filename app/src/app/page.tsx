@@ -4,7 +4,7 @@ import { useEffect, useState, useCallback } from 'react';
 import { Settings, Plus, Play, Rocket, Copy, ExternalLink, Trash2, RefreshCw, ArrowUpRight, ArrowDownLeft, Sun, Moon, Search, Send, Droplet } from 'lucide-react';
 import Image from 'next/image';
 import { TopBar } from '@/components/layout';
-import { IconButton, Button, StatusIndicator } from '@/components/ui';
+import { IconButton, Button, StatusIndicator, CocoLogo } from '@/components/ui';
 import { WalletList, AddWalletModal, SendModal } from '@/components/wallets';
 import { WorkspaceGrid, CreateWorkspaceModal, WorkspaceSettingsModal } from '@/components/workspaces';
 import { AddChainModal, ChainSettingsModal, BlockchainGrid, NetworkSelectionModal } from '@/components/chains';
@@ -149,17 +149,8 @@ export default function AppPage() {
         {/* Drag region for transparent title bar */}
         <div className="h-8 drag-region flex-shrink-0" />
         <main className="flex-1 flex flex-col items-center p-6 pt-8">
-          {/* Logo */}
-          <div className="mb-8">
-            <Image
-              src="/brand/coco.png"
-              alt="Coco"
-              width={120}
-              height={120}
-              className="mx-auto"
-              priority
-            />
-          </div>
+          {/* Logo with rotating text */}
+          <CocoLogo className="mb-4" />
 
           {/* Search and Actions Row */}
           <div className="w-full max-w-2xl mb-8 no-drag">

@@ -5,6 +5,8 @@
   "windows": ["main"],
   "permissions": [
     "core:default",
+    "core:window:allow-start-dragging",
+    "decorum:allow-show-snap-overlay",
     "shell:allow-open",
     "dialog:allow-open",
     "dialog:allow-save",
@@ -15,6 +17,7 @@
     "fs:allow-read-dir",
     "fs:allow-exists",
     "fs:allow-write-file",
+    "http:default",
     {
       "identifier": "fs:allow-read-text-file",
       "allow": [{ "path": "**" }]
@@ -23,5 +26,13 @@
       "identifier": "fs:scope",
       "allow": ["**"]
     }
-  ]
+  ],
+  "http": {
+    "scope": [
+      "https://api.mainnet-beta.solana.com/*",
+      "https://api.devnet.solana.com/*",
+      "https://*.helius-rpc.com/*",
+      "https://*.quicknode.pro/*"
+    ]
+  }
 }

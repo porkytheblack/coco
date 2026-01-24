@@ -8,3 +8,4 @@ export { Drawer } from './drawer';
 export { Terminal } from './terminal';
 export { StatusIndicator } from './status-indicator';
 export { ToastContainer } from './toast';
+export { CocoLogo } from './coco-logo';

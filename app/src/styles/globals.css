@@ -73,6 +73,10 @@
 }
 
 @layer base {
+  html {
+    @apply bg-coco-bg-primary;
+  }
+
   body {
     @apply bg-coco-bg-primary text-coco-text-primary;
     font-family: 'Sora', -apple-system, BlinkMacSystemFont, sans-serif;
