@@ -1,12 +1,26 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import { useForm } from 'react-hook-form';
+import { zodResolver } from '@hookform/resolvers/zod';
+import { z } from 'zod';
 import { FileCode } from 'lucide-react';
 import { Button, Input, Modal } from '@/components/ui';
 import { MoveDefinitionBuilder } from './move-definition-builder';
+import { useUpdateContract } from '@/hooks';
 import type { InterfaceType, UpdateContractRequest, MoveDefinition, Contract } from '@/types';
 
 type AnchorIdlVersion = 'legacy' | 'new';
+
+// Zod schema for edit contract form
+const editContractSchema = z.object({
+  name: z.string().min(1, 'Contract name is required').max(100, 'Name is too long'),
+  address: z.string().min(1, 'Contract address is required'),
+  abiJson: z.string().optional(),
+  idlJson: z.string().optional(),
+});
+
+type EditContractInput = z.infer<typeof editContractSchema>;
 
 // Example IDL placeholders for different Anchor versions
 const ANCHOR_IDL_EXAMPLES = {
@@ -49,9 +63,10 @@ const ANCHOR_IDL_EXAMPLES = {
 interface EditContractModalProps {
   isOpen: boolean;
   onClose: () => void;
-  onSave: (request: UpdateContractRequest) => Promise<void>;
+  onSave?: (request: UpdateContractRequest) => Promise<void>;
   contract: Contract;
   ecosystem: 'evm' | 'solana' | 'aptos';
+  workspaceId?: string;
 }
 
 export function EditContractModal({
@@ -60,44 +75,60 @@ export function EditContractModal({
   onSave,
   contract,
   ecosystem,
+  workspaceId,
 }: EditContractModalProps) {
-  const [name, setName] = useState('');
-  const [address, setAddress] = useState('');
-  const [abiJson, setAbiJson] = useState('');
-  const [idlJson, setIdlJson] = useState('');
+  // UI state
   const [idlVersion, setIdlVersion] = useState<AnchorIdlVersion>('new');
+  const [error, setError] = useState<string | null>(null);
+
+  // Move definition (complex nested state, kept separate)
   const [moveDefinition, setMoveDefinition] = useState<MoveDefinition>({
     moduleName: '',
     moduleAddress: '',
     functions: [],
     structs: [],
   });
-  const [isLoading, setIsLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+
+  // TanStack Query hook
+  const updateContract = useUpdateContract();
+
+  // Form
+  const {
+    register,
+    handleSubmit,
+    reset,
+    formState: { errors, isSubmitting },
+  } = useForm<EditContractInput>({
+    resolver: zodResolver(editContractSchema),
+    defaultValues: {
+      name: '',
+      address: '',
+      abiJson: '',
+      idlJson: '',
+    },
+  });
 
   // Populate form when contract changes
   useEffect(() => {
     if (contract) {
-      setName(contract.name || '');
-      setAddress(contract.address || '');
+      const abiJson = contract.abi ? JSON.stringify(contract.abi, null, 2) : '';
+      const idlJson = contract.idl ? JSON.stringify(contract.idl, null, 2) : '';
 
-      if (contract.abi) {
-        setAbiJson(JSON.stringify(contract.abi, null, 2));
-      } else {
-        setAbiJson('');
-      }
+      reset({
+        name: contract.name || '',
+        address: contract.address || '',
+        abiJson,
+        idlJson,
+      });
 
+      // Detect IDL version
       if (contract.idl) {
-        setIdlJson(JSON.stringify(contract.idl, null, 2));
-        // Detect IDL version
         const idl = contract.idl as Record<string, unknown>;
         if ('address' in idl || 'metadata' in idl) {
           setIdlVersion('new');
         } else {
           setIdlVersion('legacy');
         }
-      } else {
-        setIdlJson('');
       }
 
       if (contract.moveDefinition) {
@@ -111,7 +142,7 @@ export function EditContractModal({
         });
       }
     }
-  }, [contract]);
+  }, [contract, reset]);
 
   // Determine interface type based on ecosystem
   const getInterfaceType = (): InterfaceType => {
@@ -127,23 +158,14 @@ export function EditContractModal({
     }
   };
 
-  const handleSave = async () => {
-    if (!name.trim()) {
-      setError('Contract name is required');
-      return;
-    }
-    if (!address.trim()) {
-      setError('Contract address is required');
-      return;
-    }
+  const onSubmit = async (data: EditContractInput) => {
+    setError(null);
 
-    // Validate interface based on ecosystem
+    // Validate ABI JSON format for EVM
     let parsedAbi: object[] | undefined;
-    let parsedIdl: object | undefined;
-
-    if (ecosystem === 'evm' && abiJson.trim()) {
+    if (ecosystem === 'evm' && data.abiJson?.trim()) {
       try {
-        parsedAbi = JSON.parse(abiJson);
+        parsedAbi = JSON.parse(data.abiJson);
         if (!Array.isArray(parsedAbi)) {
           setError('ABI must be a JSON array');
           return;
@@ -154,15 +176,18 @@ export function EditContractModal({
       }
     }
 
-    if (ecosystem === 'solana' && idlJson.trim()) {
+    // Validate IDL JSON format for Solana
+    let parsedIdl: object | undefined;
+    if (ecosystem === 'solana' && data.idlJson?.trim()) {
       try {
-        parsedIdl = JSON.parse(idlJson);
+        parsedIdl = JSON.parse(data.idlJson);
       } catch {
         setError('Invalid IDL JSON format');
         return;
       }
     }
 
+    // Validate Move definition for Aptos
     if (ecosystem === 'aptos') {
       if (!moveDefinition.moduleName.trim()) {
         setError('Module name is required for Move contracts');
@@ -174,27 +199,39 @@ export function EditContractModal({
       }
     }
 
-    setIsLoading(true);
-    setError(null);
-
     try {
-      const request: UpdateContractRequest = {
-        contractId: contract.id,
-        name: name.trim(),
-        address: address.trim(),
-        interfaceType: getInterfaceType(),
-        abi: parsedAbi,
-        idl: parsedIdl,
-        moveDefinition: ecosystem === 'aptos' ? moveDefinition : undefined,
-      };
-      await onSave(request);
+      if (onSave) {
+        // Use callback if provided (maintains backward compatibility)
+        const request: UpdateContractRequest = {
+          contractId: contract.id,
+          name: data.name.trim(),
+          address: data.address.trim(),
+          interfaceType: getInterfaceType(),
+          abi: parsedAbi,
+          idl: parsedIdl,
+          moveDefinition: ecosystem === 'aptos' ? moveDefinition : undefined,
+        };
+        await onSave(request);
+      } else {
+        // Use TanStack Query mutation
+        await updateContract.mutateAsync({
+          contractId: contract.id,
+          workspaceId,
+          name: data.name.trim(),
+          address: data.address.trim(),
+          interfaceType: getInterfaceType(),
+          abi: data.abiJson?.trim() || undefined,
+          idl: data.idlJson?.trim() || undefined,
+          moveDefinition: ecosystem === 'aptos' ? JSON.stringify(moveDefinition) : undefined,
+        });
+      }
       onClose();
     } catch (err) {
       setError((err as Error).message);
-    } finally {
-      setIsLoading(false);
     }
   };
+
+  const isLoading = isSubmitting || updateContract.isPending;
 
   const getEcosystemLabel = () => {
     switch (ecosystem) {
@@ -242,7 +279,7 @@ export function EditContractModal({
           <Button variant="secondary" onClick={onClose} disabled={isLoading}>
             Cancel
           </Button>
-          <Button variant="primary" onClick={handleSave} isLoading={isLoading}>
+          <Button variant="primary" onClick={handleSubmit(onSubmit)} isLoading={isLoading}>
             Save Changes
           </Button>
         </>
@@ -261,15 +298,15 @@ export function EditContractModal({
         <Input
           label="Contract Name"
           placeholder="Token"
-          value={name}
-          onChange={(e) => setName(e.target.value)}
+          {...register('name')}
+          error={errors.name?.message}
         />
 
         <Input
           label={getAddressLabel()}
           placeholder={getAddressPlaceholder()}
-          value={address}
-          onChange={(e) => setAddress(e.target.value)}
+          {...register('address')}
+          error={errors.address?.message}
         />
 
         {/* Interface input based on ecosystem */}
@@ -279,8 +316,7 @@ export function EditContractModal({
               ABI (JSON)
             </label>
             <textarea
-              value={abiJson}
-              onChange={(e) => setAbiJson(e.target.value)}
+              {...register('abiJson')}
               placeholder='[{"type":"function","name":"transfer",...}]'
               className="w-full h-40 px-3 py-2 text-sm font-mono bg-coco-bg-primary border border-coco-border-default rounded-md focus:outline-none focus:ring-2 focus:ring-coco-accent resize-none"
             />
@@ -309,8 +345,7 @@ export function EditContractModal({
               </div>
             </div>
             <textarea
-              value={idlJson}
-              onChange={(e) => setIdlJson(e.target.value)}
+              {...register('idlJson')}
               placeholder={ANCHOR_IDL_EXAMPLES[idlVersion]}
               className="w-full h-48 px-3 py-2 text-sm font-mono bg-coco-bg-primary border border-coco-border-default rounded-md focus:outline-none focus:ring-2 focus:ring-coco-accent resize-none"
             />

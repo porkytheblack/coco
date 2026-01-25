@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState } from 'react';
 import { Settings, Plus, Play, Rocket, Copy, ExternalLink, Trash2, RefreshCw, ArrowUpRight, ArrowDownLeft, Sun, Moon, Search, Send, Droplet, FileCode, Key, Files } from 'lucide-react';
 import Image from 'next/image';
 import { TopBar } from '@/components/layout';
@@ -14,22 +14,15 @@ import { AISettingsModal, CocoChatModal } from '@/components/ai';
 import { ScriptList } from '@/components/scripts';
 import { EnvVarList } from '@/components/env';
 import { useChainStore, useWalletStore, useWorkspaceStore, useToastStore, useThemeStore, useAIStore } from '@/stores';
+import { useRouter } from '@/contexts';
 import { openExternal } from '@/lib/tauri/commands';
 import { clsx } from 'clsx';
 import type { BlockchainDefinition, NetworkDefinition } from '@/data/chain-registry';
 import { getExplorerUrl } from '@/lib/adapters/aptos-adapter';
 
-type View = 'chains' | 'chain-dashboard' | 'wallet-detail' | 'workspace';
-
-interface AppState {
-  view: View;
-  chainId?: string;
-  workspaceId?: string;
-  walletId?: string;
-}
-
 export default function AppPage() {
-  const [appState, setAppState] = useState<AppState>({ view: 'chains' });
+  // Use the client-side router for URL-based navigation
+  const { route, navigate } = useRouter();
   const [showAddChain, setShowAddChain] = useState(false);
   const [selectedBlockchain, setSelectedBlockchain] = useState<BlockchainDefinition | null>(null);
   const [showNetworkModal, setShowNetworkModal] = useState(false);
@@ -92,22 +85,22 @@ export default function AppPage() {
 
   // Load data based on view
   useEffect(() => {
-    if (appState.view === 'chain-dashboard' && appState.chainId) {
-      const chain = chains.find((c) => c.id === appState.chainId);
+    if (route.view === 'chain-dashboard' && route.chainId) {
+      const chain = chains.find((c) => c.id === route.chainId);
       if (chain) {
         selectChain(chain);
         loadWallets(chain);
-        loadWorkspaces(appState.chainId);
+        loadWorkspaces(route.chainId);
       }
     }
-  }, [appState.view, appState.chainId, chains, selectChain, loadWallets, loadWorkspaces]);
+  }, [route.view, route.chainId, chains, selectChain, loadWallets, loadWorkspaces]);
 
   useEffect(() => {
-    if (appState.view === 'workspace' && appState.workspaceId) {
-      loadWorkspace(appState.workspaceId);
+    if (route.view === 'workspace' && route.workspaceId) {
+      loadWorkspace(route.workspaceId);
       // Also load wallets for the workspace's chain
-      if (appState.chainId) {
-        const chain = chains.find((c) => c.id === appState.chainId);
+      if (route.chainId) {
+        const chain = chains.find((c) => c.id === route.chainId);
         if (chain) {
           selectChain(chain);
           loadWallets(chain);
@@ -115,18 +108,14 @@ export default function AppPage() {
       }
       return () => clearWorkspace();
     }
-  }, [appState.view, appState.workspaceId, appState.chainId, chains, loadWorkspace, clearWorkspace, selectChain, loadWallets]);
-
-  const navigate = useCallback((view: View, chainId?: string, workspaceId?: string, walletId?: string) => {
-    setAppState({ view, chainId, workspaceId, walletId });
-  }, []);
+  }, [route.view, route.workspaceId, route.chainId, chains, loadWorkspace, clearWorkspace, selectChain, loadWallets]);
 
   // Load wallet transactions when viewing wallet detail
   useEffect(() => {
-    if (appState.view === 'wallet-detail' && appState.walletId) {
-      loadWalletTransactions(appState.walletId);
+    if (route.view === 'wallet-detail' && route.walletId) {
+      loadWalletTransactions(route.walletId);
     }
-  }, [appState.view, appState.walletId, loadWalletTransactions]);
+  }, [route.view, route.walletId, loadWalletTransactions]);
 
   // Handle activating a network from the modal
   const handleActivateNetwork = async (blockchain: BlockchainDefinition, network: NetworkDefinition) => {
@@ -158,7 +147,7 @@ export default function AppPage() {
   };
 
   // Chain Selection View
-  if (appState.view === 'chains') {
+  if (route.view === 'chains') {
     return (
       <div className="min-h-screen flex flex-col">
         {/* Drag region for transparent title bar */}
@@ -241,7 +230,7 @@ export default function AppPage() {
           onGoToChain={(chain) => {
             setShowNetworkModal(false);
             setSelectedBlockchain(null);
-            navigate('chain-dashboard', chain.id);
+            navigate({ view: 'chain-dashboard', chainId: chain.id });
           }}
           onAddCustomNetwork={(blockchain) => {
             setShowNetworkModal(false);
@@ -328,10 +317,10 @@ export default function AppPage() {
   }
 
   // Chain Dashboard View
-  if (appState.view === 'chain-dashboard') {
+  if (route.view === 'chain-dashboard') {
     const handleBack = () => {
       selectChain(null);
-      navigate('chains');
+      navigate({ view: 'chains' });
     };
 
     const getSubtitle = () => {
@@ -364,7 +353,7 @@ export default function AppPage() {
             wallets={wallets}
             onWalletClick={(wallet) => {
               selectWallet(wallet);
-              navigate('wallet-detail', appState.chainId, undefined, wallet.id);
+              navigate({ view: 'wallet-detail', chainId: route.chainId, walletId: wallet.id });
             }}
             onAddWallet={() => setShowAddWallet(true)}
           />
@@ -373,16 +362,16 @@ export default function AppPage() {
 
           <WorkspaceGrid
             workspaces={workspaces}
-            onWorkspaceClick={(ws) => navigate('workspace', appState.chainId, ws.id)}
+            onWorkspaceClick={(ws) => navigate({ view: 'workspace', chainId: route.chainId, workspaceId: ws.id })}
             onNewWorkspace={() => setShowCreateWorkspace(true)}
           />
         </main>
 
-        {appState.chainId && selectedChain && (
+        {route.chainId && selectedChain && (
           <>
             <AddWalletModal
               isOpen={showAddWallet}
-              chainId={appState.chainId}
+              chainId={route.chainId}
               blockchain={selectedChain.blockchain}
               ecosystem={selectedChain.ecosystem}
               onClose={() => setShowAddWallet(false)}
@@ -396,7 +385,7 @@ export default function AppPage() {
 
             <CreateWorkspaceModal
               isOpen={showCreateWorkspace}
-              chainId={appState.chainId}
+              chainId={route.chainId}
               onClose={() => setShowCreateWorkspace(false)}
               onCreate={async (req) => {
                 await createWorkspace(req);
@@ -431,7 +420,7 @@ export default function AppPage() {
                     type: 'success',
                     title: 'Chain deleted',
                   });
-                  navigate('chains');
+                  navigate({ view: 'chains' });
                 }
               }}
             />
@@ -448,13 +437,13 @@ export default function AppPage() {
   }
 
   // Wallet Detail View
-  if (appState.view === 'wallet-detail') {
+  if (route.view === 'wallet-detail') {
     const handleBack = () => {
       selectWallet(null);
-      navigate('chain-dashboard', appState.chainId);
+      navigate({ view: 'chain-dashboard', chainId: route.chainId });
     };
 
-    const wallet = wallets.find((w) => w.id === appState.walletId) || selectedWallet;
+    const wallet = wallets.find((w) => w.id === route.walletId) || selectedWallet;
 
     if (!wallet) {
       return <div>Loading wallet...</div>;
@@ -712,9 +701,9 @@ export default function AppPage() {
   }
 
   // Workspace View
-  if (appState.view === 'workspace') {
+  if (route.view === 'workspace') {
     const handleBack = () => {
-      navigate('chain-dashboard', appState.chainId);
+      navigate({ view: 'chain-dashboard', chainId: route.chainId });
     };
 
     const workspaceTabs = [
@@ -899,7 +888,8 @@ export default function AppPage() {
           }}
           ecosystem={selectedChain?.ecosystem || 'evm'}
           blockchain={selectedChain?.blockchain || 'ethereum'}
-          chainId={appState.chainId || ''}
+          chainId={route.chainId || ''}
+          workspaceId={route.workspaceId || ''}
         />
 
         {contractToEdit && (
@@ -932,7 +922,7 @@ export default function AppPage() {
           onDelete={async () => {
             if (currentWorkspace) {
               await deleteWorkspace(currentWorkspace.id);
-              navigate('chain-dashboard', appState.chainId);
+              navigate({ view: 'chain-dashboard', chainId: route.chainId });
             }
           }}
           contractCount={contracts.length}

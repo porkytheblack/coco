@@ -16,7 +16,9 @@
   "dependencies": {
     "@aptos-labs/ts-sdk": "^5.2.1",
     "@coral-xyz/anchor": "^0.32.1",
+    "@hookform/resolvers": "^5.2.2",
     "@solana/web3.js": "^1.98.4",
+    "@tanstack/react-query": "^5.62.0",
     "@tauri-apps/api": "^2.0.0",
     "@tauri-apps/plugin-dialog": "^2.0.0",
     "@tauri-apps/plugin-fs": "^2.0.0",
@@ -29,10 +31,11 @@
     "next": "^15.1.0",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
+    "react-hook-form": "^7.71.1",
     "react-markdown": "^10.1.0",
     "remark-gfm": "^4.0.1",
-    "@tanstack/react-query": "^5.62.0",
     "tailwind-merge": "^2.2.0",
+    "zod": "^4.3.6",
     "zustand": "^5.0.0"
   },
   "devDependencies": {

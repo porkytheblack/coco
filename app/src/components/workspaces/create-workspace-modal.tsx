@@ -1,14 +1,17 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect } from 'react';
+import { useForm } from 'react-hook-form';
+import { zodResolver } from '@hookform/resolvers/zod';
 import { Button, Input, Modal } from '@/components/ui';
-import type { CreateWorkspaceRequest } from '@/types';
+import { useCreateWorkspace } from '@/hooks';
+import { createWorkspaceSchema, type CreateWorkspaceInput } from '@/lib/validations';
 
 interface CreateWorkspaceModalProps {
   isOpen: boolean;
   chainId: string;
   onClose: () => void;
-  onCreate: (request: CreateWorkspaceRequest) => Promise<void>;
+  onCreate?: (request: CreateWorkspaceInput) => Promise<void>;
 }
 
 export function CreateWorkspaceModal({
@@ -17,37 +20,49 @@ export function CreateWorkspaceModal({
   onClose,
   onCreate,
 }: CreateWorkspaceModalProps) {
-  const [name, setName] = useState('');
-  const [isLoading, setIsLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const createWorkspace = useCreateWorkspace();
 
-  const handleSubmit = async () => {
-    if (!name.trim()) {
-      setError('Workspace name is required');
-      return;
+  const {
+    register,
+    handleSubmit,
+    reset,
+    formState: { errors, isSubmitting },
+  } = useForm<CreateWorkspaceInput>({
+    resolver: zodResolver(createWorkspaceSchema),
+    defaultValues: {
+      name: '',
+      chainId,
+    },
+  });
+
+  // Reset form when chainId changes or modal opens
+  useEffect(() => {
+    if (isOpen) {
+      reset({ name: '', chainId });
     }
+  }, [isOpen, chainId, reset]);
 
-    setIsLoading(true);
-    setError(null);
-
+  const onSubmit = async (data: CreateWorkspaceInput) => {
     try {
-      await onCreate({
-        chainId,
-        name: name.trim(),
-      });
+      // Use the passed onCreate callback if provided (for backward compatibility)
+      // Otherwise use the TanStack Query mutation
+      if (onCreate) {
+        await onCreate(data);
+      } else {
+        await createWorkspace.mutateAsync(data);
+      }
       handleClose();
-    } catch (err) {
-      setError((err as Error).message);
-    } finally {
-      setIsLoading(false);
+    } catch {
+      // Error is handled by React Hook Form or mutation
     }
   };
 
   const handleClose = () => {
-    setName('');
-    setError(null);
+    reset();
     onClose();
   };
+
+  const error = errors.name?.message || createWorkspace.error?.message;
 
   return (
     <Modal
@@ -57,21 +72,25 @@ export function CreateWorkspaceModal({
       size="md"
       footer={
         <>
-          <Button variant="secondary" onClick={handleClose} disabled={isLoading}>
+          <Button variant="secondary" onClick={handleClose} disabled={isSubmitting}>
             Cancel
           </Button>
-          <Button variant="primary" onClick={handleSubmit} isLoading={isLoading}>
+          <Button
+            variant="primary"
+            onClick={handleSubmit(onSubmit)}
+            isLoading={isSubmitting || createWorkspace.isPending}
+          >
             Create Workspace
           </Button>
         </>
       }
     >
-      <div className="space-y-4">
+      <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
         <Input
           label="Workspace Name"
           placeholder="MyContract"
-          value={name}
-          onChange={(e) => setName(e.target.value)}
+          {...register('name')}
+          error={errors.name?.message}
         />
 
         <p className="text-xs text-coco-text-tertiary">
@@ -79,7 +98,7 @@ export function CreateWorkspaceModal({
         </p>
 
         {error && <p className="text-sm text-coco-error">{error}</p>}
-      </div>
+      </form>
     </Modal>
   );
 }

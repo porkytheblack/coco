@@ -3,6 +3,21 @@
 // Blockchain & Networks
 export * from './use-blockchains';
 
+// Chains (legacy)
+export * from './use-chains';
+
+// Wallets
+export * from './use-wallets';
+
+// Workspaces
+export * from './use-workspaces';
+
+// Contracts
+export * from './use-contracts';
+
+// Transactions
+export * from './use-transactions';
+
 // Scripts
 export * from './use-scripts';
 

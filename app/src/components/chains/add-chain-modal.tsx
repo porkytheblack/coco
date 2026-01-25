@@ -1,14 +1,18 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useEffect } from 'react';
+import { useForm } from 'react-hook-form';
+import { zodResolver } from '@hookform/resolvers/zod';
+import { z } from 'zod';
 import { Button, Input, Modal } from '@/components/ui';
+import { useCreateChain } from '@/hooks';
 import type { Ecosystem, CreateChainRequest } from '@/types';
 import type { BlockchainDefinition } from '@/data/chain-registry';
 
 interface AddChainModalProps {
   isOpen: boolean;
   onClose: () => void;
-  onAdd: (request: CreateChainRequest) => Promise<void>;
+  onAdd?: (request: CreateChainRequest) => Promise<void>;
   /** Optional blockchain context for adding a custom network to an existing blockchain */
   blockchain?: BlockchainDefinition | null;
 }
@@ -19,82 +23,109 @@ const ecosystemOptions: { value: Ecosystem; label: string; currency: string }[] 
   { value: 'aptos', label: 'Aptos', currency: 'APT' },
 ];
 
+// Create schema with conditional chainId validation
+const addChainSchema = z.object({
+  name: z.string().min(1, 'Chain name is required').max(100, 'Name is too long'),
+  ecosystem: z.enum(['evm', 'solana', 'aptos']),
+  rpcUrl: z.string().min(1, 'RPC URL is required').url('Invalid RPC URL'),
+  chainId: z.string().optional(),
+  blockExplorerUrl: z.string().url('Invalid URL').optional().or(z.literal('')),
+}).refine(
+  (data) => data.ecosystem !== 'evm' || (data.chainId && data.chainId.trim() !== ''),
+  { message: 'Chain ID is required for EVM chains', path: ['chainId'] }
+).refine(
+  (data) => {
+    if (data.ecosystem !== 'evm' || !data.chainId) return true;
+    const num = parseInt(data.chainId, 10);
+    return !isNaN(num) && num > 0;
+  },
+  { message: 'Chain ID must be a positive number', path: ['chainId'] }
+);
+
+type AddChainInput = z.infer<typeof addChainSchema>;
+
 export function AddChainModal({ isOpen, onClose, onAdd, blockchain }: AddChainModalProps) {
-  const [name, setName] = useState('');
-  const [ecosystem, setEcosystem] = useState<Ecosystem>('evm');
-  const [rpcUrl, setRpcUrl] = useState('');
-  const [chainId, setChainId] = useState('');
-  const [blockExplorerUrl, setBlockExplorerUrl] = useState('');
-  const [isLoading, setIsLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const createChain = useCreateChain();
 
   // When blockchain context is provided, pre-populate and lock the ecosystem
   const isBlockchainContext = !!blockchain;
 
-  useEffect(() => {
-    if (blockchain) {
-      setEcosystem(blockchain.ecosystem);
-      setName(`${blockchain.name} Custom`);
-    }
-  }, [blockchain, isOpen]);
+  const {
+    register,
+    handleSubmit,
+    reset,
+    watch,
+    setValue,
+    formState: { errors, isSubmitting },
+  } = useForm<AddChainInput>({
+    resolver: zodResolver(addChainSchema),
+    defaultValues: {
+      name: '',
+      ecosystem: 'evm',
+      rpcUrl: '',
+      chainId: '',
+      blockExplorerUrl: '',
+    },
+  });
 
+  const ecosystem = watch('ecosystem');
   const selectedEcosystem = ecosystemOptions.find((e) => e.value === ecosystem);
   const showChainId = ecosystem === 'evm';
 
-  const handleSubmit = async () => {
-    if (!name.trim() || !rpcUrl.trim()) {
-      setError('Name and RPC URL are required');
-      return;
+  // When blockchain context is provided, pre-populate values
+  useEffect(() => {
+    if (isOpen && blockchain) {
+      setValue('ecosystem', blockchain.ecosystem);
+      setValue('name', `${blockchain.name} Custom`);
+    } else if (isOpen) {
+      reset({
+        name: '',
+        ecosystem: 'evm',
+        rpcUrl: '',
+        chainId: '',
+        blockExplorerUrl: '',
+      });
     }
+  }, [blockchain, isOpen, setValue, reset]);
 
-    if (ecosystem === 'evm' && !chainId.trim()) {
-      setError('Chain ID is required for EVM chains');
-      return;
-    }
-
-    const chainIdNumeric = chainId.trim() ? parseInt(chainId.trim(), 10) : undefined;
-    if (ecosystem === 'evm' && (isNaN(chainIdNumeric!) || chainIdNumeric! <= 0)) {
-      setError('Chain ID must be a positive number');
-      return;
-    }
-
-    setIsLoading(true);
-    setError(null);
+  const onSubmit = async (data: AddChainInput) => {
+    const chainIdNumeric = data.chainId ? parseInt(data.chainId, 10) : undefined;
 
     try {
-      await onAdd({
-        name: name.trim(),
-        ecosystem,
-        rpcUrl: rpcUrl.trim(),
+      const request: CreateChainRequest = {
+        name: data.name.trim(),
+        ecosystem: data.ecosystem,
+        rpcUrl: data.rpcUrl.trim(),
         chainIdNumeric,
         currencySymbol: blockchain?.nativeCurrency || selectedEcosystem?.currency || 'ETH',
-        blockExplorerUrl: blockExplorerUrl.trim() || undefined,
+        blockExplorerUrl: data.blockExplorerUrl?.trim() || undefined,
         blockchain: blockchain?.id || 'custom',
         networkType: 'custom',
         isCustom: true,
         iconId: blockchain?.iconId || 'custom',
-      });
+      };
+
+      if (onAdd) {
+        await onAdd(request);
+      } else {
+        await createChain.mutateAsync(request);
+      }
       handleClose();
-    } catch (err) {
-      setError((err as Error).message);
-    } finally {
-      setIsLoading(false);
+    } catch {
+      // Error is handled by the mutation or caught by React Hook Form
     }
   };
 
   const handleClose = () => {
-    setName('');
-    setEcosystem('evm');
-    setRpcUrl('');
-    setChainId('');
-    setBlockExplorerUrl('');
-    setError(null);
+    reset();
     onClose();
   };
 
   const modalTitle = blockchain
     ? `Add Custom Network to ${blockchain.name}`
     : 'Add Chain';
+
+  const error = createChain.error?.message;
 
   return (
     <Modal
@@ -104,21 +135,25 @@ export function AddChainModal({ isOpen, onClose, onAdd, blockchain }: AddChainMo
       size="md"
       footer={
         <>
-          <Button variant="secondary" onClick={handleClose} disabled={isLoading}>
+          <Button variant="secondary" onClick={handleClose} disabled={isSubmitting}>
             Cancel
           </Button>
-          <Button variant="primary" onClick={handleSubmit} isLoading={isLoading}>
+          <Button
+            variant="primary"
+            onClick={handleSubmit(onSubmit)}
+            isLoading={isSubmitting || createChain.isPending}
+          >
             Add Chain
           </Button>
         </>
       }
     >
-      <div className="space-y-4">
+      <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
         <Input
           label="Chain Name"
           placeholder="Ethereum Sepolia"
-          value={name}
-          onChange={(e) => setName(e.target.value)}
+          {...register('name')}
+          error={errors.name?.message}
         />
 
         <div>
@@ -131,8 +166,7 @@ export function AddChainModal({ isOpen, onClose, onAdd, blockchain }: AddChainMo
             </div>
           ) : (
             <select
-              value={ecosystem}
-              onChange={(e) => setEcosystem(e.target.value as Ecosystem)}
+              {...register('ecosystem')}
               className="w-full px-3 py-2 text-sm bg-coco-bg-primary border border-coco-border-default rounded-md focus:outline-none focus:ring-2 focus:ring-coco-accent focus:border-transparent"
             >
               {ecosystemOptions.map((option) => (
@@ -147,16 +181,16 @@ export function AddChainModal({ isOpen, onClose, onAdd, blockchain }: AddChainMo
         <Input
           label="RPC URL"
           placeholder="https://sepolia.infura.io/v3/your-key"
-          value={rpcUrl}
-          onChange={(e) => setRpcUrl(e.target.value)}
+          {...register('rpcUrl')}
+          error={errors.rpcUrl?.message}
         />
 
         {showChainId && (
           <Input
             label="Chain ID"
             placeholder="11155111"
-            value={chainId}
-            onChange={(e) => setChainId(e.target.value)}
+            {...register('chainId')}
+            error={errors.chainId?.message}
             type="number"
           />
         )}
@@ -164,14 +198,14 @@ export function AddChainModal({ isOpen, onClose, onAdd, blockchain }: AddChainMo
         <Input
           label="Block Explorer URL (optional)"
           placeholder="https://sepolia.etherscan.io"
-          value={blockExplorerUrl}
-          onChange={(e) => setBlockExplorerUrl(e.target.value)}
+          {...register('blockExplorerUrl')}
+          error={errors.blockExplorerUrl?.message}
         />
 
         {error && (
           <p className="text-sm text-coco-error">{error}</p>
         )}
-      </div>
+      </form>
     </Modal>
   );
 }
