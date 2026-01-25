@@ -63,6 +63,12 @@ export const queryKeys = {
   conversation: (id: string) => ['conversations', 'detail', id] as const,
   messages: (conversationId: string) => ['messages', conversationId] as const,
 
+  // Workflows
+  workflows: (workspaceId: string) => ['workflows', workspaceId] as const,
+  workflow: (id: string) => ['workflows', 'detail', id] as const,
+  workflowRuns: (workflowId: string) => ['workflow-runs', workflowId] as const,
+  workflowRun: (runId: string) => ['workflow-runs', 'detail', runId] as const,
+
   // Preferences
   preferences: ['preferences'] as const,
   preference: (key: string) => ['preferences', key] as const,

@@ -8,6 +8,7 @@ mod env_service;
 mod conversation_service;
 mod preference_service;
 mod contract_doc_service;
+mod workflow_service;
 
 pub use chain_service::ChainService;
 pub use wallet_service::WalletService;
@@ -19,3 +20,5 @@ pub use env_service::EnvService;
 pub use conversation_service::ConversationService;
 pub use preference_service::PreferenceService;
 pub use contract_doc_service::ContractDocService;
+pub use workflow_service::{WorkflowService, Workflow, WorkflowRun, WorkflowStepExecution, ExecutionMode};
+

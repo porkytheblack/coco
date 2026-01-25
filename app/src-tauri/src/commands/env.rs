@@ -16,6 +16,18 @@ pub async fn list_env_vars(
 }
 
 #[tauri::command(rename_all = "camelCase")]
+pub async fn list_env_vars_with_values(
+    workspace_id: String,
+    state: State<'_, AppState>,
+) -> Result<std::collections::HashMap<String, String>, String> {
+    state
+        .env_service
+        .get_all_env_values(&workspace_id)
+        .await
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command(rename_all = "camelCase")]
 pub async fn get_env_var(id: String, state: State<'_, AppState>) -> Result<EnvironmentVariable, String> {
     state
         .env_service

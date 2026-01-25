@@ -616,6 +616,11 @@ export async function listEnvVars(workspaceId: string): Promise<EnvironmentVaria
   return invoke<EnvironmentVariable[]>('list_env_vars', { workspaceId });
 }
 
+export async function listEnvVarsWithValues(workspaceId: string): Promise<Record<string, string>> {
+  if (!checkIsTauri()) return {};
+  return invoke<Record<string, string>>('list_env_vars_with_values', { workspaceId });
+}
+
 export async function getEnvVar(envVarId: string): Promise<EnvironmentVariable> {
   if (!checkIsTauri()) throw new Error('Not running in Tauri');
   return invoke<EnvironmentVariable>('get_env_var', { envVarId });
@@ -825,3 +830,132 @@ export async function deleteFunctionDoc(
   if (!checkIsTauri()) throw new Error('Not running in Tauri');
   return invoke<void>('delete_function_doc', { contractId, functionName });
 }
+
+// ============================================================================
+// Workflow commands
+// ============================================================================
+
+// Workflow type for frontend (matches backend structure)
+export interface WorkflowData {
+  id: string;
+  workspaceId: string;
+  name: string;
+  description?: string;
+  definition: string; // JSON string of WorkflowDefinition
+  createdAt: string;
+  updatedAt: string;
+}
+
+// Workflow run type for frontend
+export interface WorkflowRunData {
+  id: string;
+  workflowId: string;
+  status: 'pending' | 'running' | 'completed' | 'failed' | 'cancelled';
+  variables?: string; // JSON string
+  stepLogs?: string; // JSON string
+  error?: string;
+  startedAt: string;
+  completedAt?: string;
+}
+
+export async function listWorkflows(workspaceId: string): Promise<WorkflowData[]> {
+  if (!checkIsTauri()) return [];
+  return invoke<WorkflowData[]>('list_workflows', { workspaceId });
+}
+
+export async function getWorkflow(workflowId: string): Promise<WorkflowData> {
+  if (!checkIsTauri()) throw new Error('Not running in Tauri');
+  return invoke<WorkflowData>('get_workflow', { workflowId });
+}
+
+export async function createWorkflow(
+  workspaceId: string,
+  name: string,
+  description?: string
+): Promise<WorkflowData> {
+  if (!checkIsTauri()) throw new Error('Not running in Tauri');
+  return invoke<WorkflowData>('create_workflow', {
+    workspaceId,
+    name,
+    description,
+  });
+}
+
+export async function updateWorkflow(
+  workflowId: string,
+  name?: string,
+  description?: string,
+  definition?: string
+): Promise<WorkflowData> {
+  if (!checkIsTauri()) throw new Error('Not running in Tauri');
+  return invoke<WorkflowData>('update_workflow', {
+    workflowId,
+    name,
+    description,
+    definition,
+  });
+}
+
+export async function deleteWorkflow(workflowId: string): Promise<void> {
+  if (!checkIsTauri()) throw new Error('Not running in Tauri');
+  return invoke<void>('delete_workflow', { workflowId });
+}
+
+export async function listWorkflowRuns(workflowId: string): Promise<WorkflowRunData[]> {
+  if (!checkIsTauri()) return [];
+  return invoke<WorkflowRunData[]>('list_workflow_runs', { workflowId });
+}
+
+export async function updateWorkflowRunStatus(
+  runId: string,
+  status: string,
+  currentNodeId?: string,
+  error?: string
+): Promise<WorkflowRunData> {
+  if (!checkIsTauri()) throw new Error('Not running in Tauri');
+  return invoke<WorkflowRunData>('update_workflow_run_status', {
+    runId,
+    status,
+    currentNodeId,
+    error,
+  });
+}
+
+export async function updateWorkflowRunStepLogs(
+  runId: string,
+  stepLogs: string
+): Promise<void> {
+  if (!checkIsTauri()) throw new Error('Not running in Tauri');
+  return invoke<void>('update_workflow_run_step_logs', {
+    runId,
+    stepLogs,
+  });
+}
+
+export async function getWorkflowRun(runId: string): Promise<WorkflowRunData> {
+  if (!checkIsTauri()) throw new Error('Not running in Tauri');
+  return invoke<WorkflowRunData>('get_workflow_run', { runId });
+}
+
+export async function runWorkflow(
+  workflowId: string,
+  variables?: Record<string, unknown>
+): Promise<WorkflowRunData> {
+  if (!checkIsTauri()) throw new Error('Not running in Tauri');
+  return invoke<WorkflowRunData>('run_workflow', {
+    workflowId,
+    variables: variables ? JSON.stringify(variables) : undefined,
+  });
+}
+
+export async function executeAdapter(
+  adapterId: string,
+  operation: string,
+  config: Record<string, unknown>,
+  input: Record<string, unknown>
+): Promise<unknown> {
+  if (!checkIsTauri()) throw new Error('Not running in Tauri');
+  return invoke('execute_adapter', { adapterId, operation, config, input });
+}
+
+

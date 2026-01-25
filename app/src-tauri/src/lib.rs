@@ -9,7 +9,7 @@ use adapters::AdapterRegistry;
 use db::DbPool;
 use services::{
     BlockchainService, ChainService, ContractDocService, ConversationService, EnvService,
-    PreferenceService, RunService, ScriptService, WalletService, WorkspaceService,
+    PreferenceService, RunService, ScriptService, WalletService, WorkspaceService, WorkflowService,
 };
 use std::sync::Arc;
 use tauri::Manager;
@@ -33,6 +33,7 @@ pub struct AppState {
     pub conversation_service: Arc<ConversationService>,
     pub preference_service: Arc<PreferenceService>,
     pub contract_doc_service: Arc<ContractDocService>,
+    pub workflow_service: Arc<WorkflowService>,
 }
 
 impl AppState {
@@ -53,6 +54,7 @@ impl AppState {
         let conversation_service = Arc::new(ConversationService::new(db_pool.clone()));
         let preference_service = Arc::new(PreferenceService::new(db_pool.clone()));
         let contract_doc_service = Arc::new(ContractDocService::new(db_pool.clone()));
+        let workflow_service = Arc::new(WorkflowService::new(db_pool.clone()));
 
         Self {
             db_pool,
@@ -67,6 +69,7 @@ impl AppState {
             conversation_service,
             preference_service,
             contract_doc_service,
+            workflow_service,
         }
     }
 }
@@ -179,6 +182,7 @@ pub fn run() {
             commands::scripts::get_script_run_logs,
             // v0.0.3: Environment variable commands
             commands::env::list_env_vars,
+            commands::env::list_env_vars_with_values,
             commands::env::get_env_var,
             commands::env::get_env_value,
             commands::env::create_env_var,
@@ -214,6 +218,23 @@ pub fn run() {
             commands::contract_docs::upsert_contract_doc,
             commands::contract_docs::delete_contract_doc,
             commands::contract_docs::delete_function_doc,
+            // v0.0.4: Workflow commands
+            commands::workflows::list_workflows,
+            commands::workflows::get_workflow,
+            commands::workflows::create_workflow,
+            commands::workflows::update_workflow,
+            commands::workflows::delete_workflow,
+            commands::workflows::list_workflow_runs,
+            commands::workflows::get_workflow_run,
+            commands::workflows::run_workflow,
+            commands::workflows::pause_workflow_run,
+            commands::workflows::resume_workflow_run,
+            commands::workflows::cancel_workflow_run,
+            commands::workflows::get_workflow_step_executions,
+            commands::workflows::update_workflow_run_status,
+            commands::workflows::update_workflow_run_step_logs,
+            // v0.0.5: Adapter commands
+            commands::adapters::execute_adapter,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

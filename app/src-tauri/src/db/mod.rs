@@ -890,6 +890,65 @@ async fn create_v003_tables(pool: &DbPool) -> Result<(), sqlx::Error> {
     .execute(pool)
     .await?;
 
+    // Create workflow tables
+    sqlx::query(
+        r#"
+        -- Workflows table
+        CREATE TABLE IF NOT EXISTS workflows (
+            id TEXT PRIMARY KEY,
+            workspace_id TEXT NOT NULL,
+            name TEXT NOT NULL,
+            description TEXT,
+            definition TEXT NOT NULL,
+            created_at TEXT NOT NULL DEFAULT (datetime('now')),
+            updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+            FOREIGN KEY (workspace_id) REFERENCES workspaces(id) ON DELETE CASCADE
+        );
+
+        -- Workflow runs table (execution instances with resumability)
+        CREATE TABLE IF NOT EXISTS workflow_runs (
+            id TEXT PRIMARY KEY,
+            workflow_id TEXT NOT NULL,
+            status TEXT NOT NULL DEFAULT 'pending',
+            execution_mode TEXT NOT NULL DEFAULT 'full',
+            target_node_id TEXT,
+            current_node_id TEXT,
+            variables TEXT,
+            step_logs TEXT,
+            error TEXT,
+            started_at TEXT NOT NULL DEFAULT (datetime('now')),
+            completed_at TEXT,
+            paused_at TEXT,
+            resumed_at TEXT,
+            FOREIGN KEY (workflow_id) REFERENCES workflows(id) ON DELETE CASCADE
+        );
+
+        -- Workflow step executions table (individual node executions for resumability)
+        CREATE TABLE IF NOT EXISTS workflow_step_executions (
+            id TEXT PRIMARY KEY,
+            run_id TEXT NOT NULL,
+            node_id TEXT NOT NULL,
+            node_type TEXT NOT NULL,
+            status TEXT NOT NULL DEFAULT 'pending',
+            input TEXT,
+            output TEXT,
+            error TEXT,
+            started_at TEXT,
+            completed_at TEXT,
+            execution_order INTEGER NOT NULL,
+            FOREIGN KEY (run_id) REFERENCES workflow_runs(id) ON DELETE CASCADE
+        );
+
+        -- Create indexes for workflow tables
+        CREATE INDEX IF NOT EXISTS idx_workflows_workspace_id ON workflows(workspace_id);
+        CREATE INDEX IF NOT EXISTS idx_workflow_runs_workflow_id ON workflow_runs(workflow_id);
+        CREATE INDEX IF NOT EXISTS idx_workflow_runs_status ON workflow_runs(status);
+        CREATE INDEX IF NOT EXISTS idx_workflow_step_executions_run_id ON workflow_step_executions(run_id);
+        "#,
+    )
+    .execute(pool)
+    .await?;
+
     Ok(())
 }
 

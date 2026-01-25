@@ -13,6 +13,9 @@ import { TransactionPanel, CreateTransactionModal } from '@/components/transacti
 import { AISettingsModal, CocoChatModal } from '@/components/ai';
 import { ScriptList } from '@/components/scripts';
 import { EnvVarList } from '@/components/env';
+import { WorkflowList, CreateWorkflowModal, WorkflowBuilder } from '@/components/workflows';
+import { useWorkflows, useWorkflow, useCreateWorkflow, useUpdateWorkflow, useRunWorkflow } from '@/hooks/use-workflows';
+import { useScripts } from '@/hooks';
 import { useChainStore, useWalletStore, useWorkspaceStore, useToastStore, useThemeStore, useAIStore } from '@/stores';
 import { useRouter } from '@/contexts';
 import { openExternal } from '@/lib/tauri/commands';
@@ -69,7 +72,17 @@ export default function AppPage() {
   const [showSettings, setShowSettings] = useState(false);
   const [showCreateTransaction, setShowCreateTransaction] = useState(false);
   const [selectedContract, setSelectedContract] = useState<typeof contracts[0] | null>(null);
-  const [workspaceTab, setWorkspaceTab] = useState<'contracts' | 'scripts' | 'env'>('contracts');
+  const [workspaceTab, setWorkspaceTab] = useState<'contracts' | 'scripts' | 'env' | 'workflows'>('contracts');
+  const [showCreateWorkflow, setShowCreateWorkflow] = useState(false);
+  const [selectedWorkflowId, setSelectedWorkflowId] = useState<string | null>(null);
+
+  // Workflow hooks
+  const { data: workflows = [], isLoading: isLoadingWorkflows } = useWorkflows(currentWorkspace?.id);
+  const { data: scripts = [] } = useScripts(currentWorkspace?.id);
+  const { data: selectedWorkflow } = useWorkflow(selectedWorkflowId || undefined);
+  const createWorkflowMutation = useCreateWorkflow();
+  const updateWorkflowMutation = useUpdateWorkflow();
+  const runWorkflowMutation = useRunWorkflow();
 
   // AI and theme state
   const { theme, toggleTheme } = useThemeStore();
@@ -710,6 +723,7 @@ export default function AppPage() {
       { id: 'contracts' as const, label: 'Contracts', icon: Files },
       { id: 'scripts' as const, label: 'Scripts', icon: FileCode },
       { id: 'env' as const, label: 'Environment', icon: Key },
+      { id: 'workflows' as const, label: 'Workflows', icon: Rocket },
     ];
 
     return (
@@ -877,7 +891,67 @@ export default function AppPage() {
               <EnvVarList workspaceId={currentWorkspace.id} />
             </main>
           )}
+
+          {/* Workflows Tab Content */}
+          {workspaceTab === 'workflows' && currentWorkspace && !selectedWorkflowId && (
+            <main className="flex-1 p-6 overflow-y-auto">
+              <WorkflowList
+                workflows={workflows}
+                onWorkflowClick={(workflow) => {
+                  setSelectedWorkflowId(workflow.id);
+                }}
+                onNewWorkflow={() => setShowCreateWorkflow(true)}
+              />
+            </main>
+          )}
+
+          {/* Workflow Builder View */}
+          {workspaceTab === 'workflows' && currentWorkspace && selectedWorkflowId && selectedWorkflow && (
+            <WorkflowBuilder
+              workflow={{
+                id: selectedWorkflow.id,
+                name: selectedWorkflow.name,
+                definition: JSON.parse(selectedWorkflow.definition || '{"nodes":[],"edges":[],"variables":[]}'),
+              }}
+              transactions={transactions}
+              contracts={contracts}
+              scripts={scripts.map(s => ({ id: s.id, name: s.name }))}
+              wallets={wallets.map(w => ({ id: w.id, name: w.name }))}
+              onSave={async (definition) => {
+                await updateWorkflowMutation.mutateAsync({
+                  workflowId: selectedWorkflowId,
+                  workspaceId: currentWorkspace.id,
+                  definition,
+                });
+              }}
+              onRun={async () => {
+                return await runWorkflowMutation.mutateAsync({
+                  workflowId: selectedWorkflowId,
+                });
+              }}
+              onBack={() => setSelectedWorkflowId(null)}
+              isSaving={updateWorkflowMutation.isPending}
+              isRunning={runWorkflowMutation.isPending}
+            />
+          )}
         </div>
+
+        {/* Workflow Modal */}
+        <CreateWorkflowModal
+          isOpen={showCreateWorkflow}
+          onClose={() => setShowCreateWorkflow(false)}
+          onCreate={async (name, description) => {
+            if (currentWorkspace) {
+              await createWorkflowMutation.mutateAsync({
+                workspaceId: currentWorkspace.id,
+                name,
+                description,
+              });
+              setShowCreateWorkflow(false);
+            }
+          }}
+          isCreating={createWorkflowMutation.isPending}
+        />
 
         {/* Workspace Modals */}
         <AddContractModal

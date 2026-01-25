@@ -7,6 +7,7 @@ use crate::types::{ChainConfig, Ecosystem};
 
 pub mod mock;
 pub mod traits;
+pub mod postgres;
 
 pub use traits::*;
 

@@ -1,0 +1,335 @@
+'use client';
+
+import { useState, useMemo } from 'react';
+import { 
+  Play, 
+  CheckCircle, 
+  XCircle, 
+  Clock, 
+  ChevronRight, 
+  ChevronDown,
+  Activity,
+  RefreshCw,
+  Bug,
+  FileJson
+} from 'lucide-react';
+import { useQueryClient } from '@tanstack/react-query';
+import { useWorkflowRuns, useWorkflow } from '@/hooks/use-workflows';
+import { queryKeys } from '@/lib/react-query';
+import type { WorkflowStepLog, WorkflowRunStatus } from '@/lib/workflow/types';
+import { clsx } from 'clsx';
+
+interface WorkflowRunsPanelProps {
+  workflowId: string;
+  onRunSelect?: (runId: string) => void;
+}
+
+interface ParsedWorkflowRun {
+  id: string;
+  workflowId: string;
+  status: string;
+  variables: Record<string, unknown>;
+  stepLogs: WorkflowStepLog[];
+  error?: string;
+  startedAt: string;
+  completedAt?: string;
+  durationMs?: number;
+}
+
+export function WorkflowRunsPanel({ workflowId, onRunSelect }: WorkflowRunsPanelProps) {
+  const queryClient = useQueryClient();
+  const [selectedRunId, setSelectedRunId] = useState<string | null>(null);
+  const [showDebug, setShowDebug] = useState(false);
+  const { data: runsData = [], isLoading, refetch } = useWorkflowRuns(workflowId, true); // Polling enabled
+  const { data: workflow } = useWorkflow(showDebug ? workflowId : undefined); // Fetch workflow only in debug
+
+  const handleRefresh = () => {
+    refetch();
+    // Also invalidate to be sure
+    queryClient.invalidateQueries({ queryKey: queryKeys.workflowRuns(workflowId) });
+  };
+
+  // Parse runs data
+  const runs = useMemo(() => {
+    return runsData.map(run => {
+      let stepLogs: WorkflowStepLog[] = [];
+      let variables: Record<string, unknown> = {};
+
+      try {
+        if (run.stepLogs) stepLogs = JSON.parse(run.stepLogs);
+        if (run.variables) variables = JSON.parse(run.variables);
+      } catch (e) {
+        console.error('Failed to parse run data', e);
+      }
+
+      const start = new Date(run.startedAt).getTime();
+      const end = run.completedAt ? new Date(run.completedAt).getTime() : Date.now();
+      const durationMs = run.status === 'running' ? undefined : (end - start);
+
+      return {
+        ...run,
+        stepLogs,
+        variables,
+        durationMs
+      } as ParsedWorkflowRun;
+    }).sort((a, b) => new Date(b.startedAt).getTime() - new Date(a.startedAt).getTime());
+  }, [runsData]);
+
+  const selectedRun = selectedRunId ? runs.find(r => r.id === selectedRunId) : runs[0];
+
+  // Helper for date formatting
+  const formatTime = (dateStr: string) => {
+    return new Intl.DateTimeFormat('en-US', {
+      hour: '2-digit',
+      minute: '2-digit',
+      second: '2-digit',
+      hour12: false
+    }).format(new Date(dateStr));
+  };
+  
+  const formatDate = (dateStr: string) => {
+    return new Intl.DateTimeFormat('en-US', {
+      month: 'short',
+      day: 'numeric'
+    }).format(new Date(dateStr));
+  };
+
+  const formatFullDate = (dateStr: string) => {
+    return new Intl.DateTimeFormat('en-US', {
+      dateStyle: 'medium',
+      timeStyle: 'medium'
+    }).format(new Date(dateStr));
+  };
+
+  if (isLoading && runs.length === 0) {
+    return (
+      <div className="flex items-center justify-center h-40 text-coco-text-tertiary">
+        Loading runs...
+      </div>
+    );
+  }
+
+  if (runs.length === 0) {
+    return (
+      <div className="flex flex-col items-center justify-center h-40 text-coco-text-tertiary">
+        <Activity className="w-8 h-8 mb-2 opacity-50" />
+        <p className="text-sm">No runs yet</p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="flex h-full border-t border-coco-border-subtle bg-coco-bg-elevated">
+      {/* Runs List */}
+      <div className="w-64 border-r border-coco-border-subtle overflow-y-auto">
+        <div className="p-2 sticky top-0 bg-coco-bg-elevated border-b border-coco-border-subtle flex items-center justify-between">
+          <h3 className="text-xs font-semibold text-coco-text-secondary uppercase tracking-wider">
+            Execution History
+          </h3>
+          <div className="flex items-center gap-1">
+            <button 
+                onClick={() => setShowDebug(!showDebug)}
+                className={`p-1 rounded transition-colors ${showDebug ? 'text-coco-accent bg-coco-bg-tertiary' : 'text-coco-text-tertiary hover:text-coco-text-primary'}`}
+                title="Toggle Debug View"
+            >
+                <Bug className="w-3 h-3" />
+            </button>
+            <button 
+                onClick={handleRefresh}
+                className="p-1 hover:bg-coco-bg-tertiary rounded text-coco-text-tertiary hover:text-coco-text-primary transition-colors"
+                title="Refresh runs"
+            >
+                <RefreshCw className="w-3 h-3" />
+            </button>
+          </div>
+        </div>
+        <div>
+          {runs.map(run => (
+            <button
+              key={run.id}
+              onClick={() => {
+                setSelectedRunId(run.id);
+                onRunSelect?.(run.id);
+              }}
+              className={clsx(
+                "w-full text-left px-3 py-2 text-sm flex items-center justify-between hover:bg-coco-bg-tertiary transition-colors",
+                ((selectedRunId === run.id) || (!selectedRunId && runs[0]?.id === run.id)) && "bg-coco-bg-tertiary border-l-2 border-coco-accent"
+              )}
+            >
+              <div className="flex items-center gap-2">
+                <StatusIcon status={run.status} className="w-4 h-4" />
+                <div className="flex flex-col">
+                  <span className="font-medium text-coco-text-primary">
+                    {run.status === 'running' ? 'Running...' : formatTime(run.startedAt)}
+                  </span>
+                  <span className="text-xs text-coco-text-tertiary">
+                    {formatDate(run.startedAt)}
+                  </span>
+                </div>
+              </div>
+              {run.durationMs !== undefined && (
+                <span className="text-xs text-coco-text-tertiary font-mono">
+                  {(run.durationMs / 1000).toFixed(1)}s
+                </span>
+              )}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {/* Run Details */}
+      {selectedRun && (
+        <div className="flex-1 overflow-y-auto p-4 font-mono text-sm">
+          <div className="space-y-4">
+            {/* Header */}
+            <div className="flex items-center justify-between pb-4 border-b border-coco-border-subtle">
+              <div className="flex items-center gap-3">
+                <StatusIcon status={selectedRun.status} className="w-5 h-5" />
+                <div>
+                  <h2 className="font-semibold text-coco-text-primary">
+                    Execution #{selectedRun.id.slice(-4)}
+                  </h2>
+                  <p className="text-xs text-coco-text-tertiary">
+                    Started {formatFullDate(selectedRun.startedAt)}
+                  </p>
+                </div>
+              </div>
+              {selectedRun.durationMs !== undefined && (
+                <div className="flex items-center gap-1 text-coco-text-secondary">
+                  <Clock className="w-4 h-4" />
+                  <span>{(selectedRun.durationMs / 1000).toFixed(2)}s</span>
+                </div>
+              )}
+            </div>
+
+            {/* Error Message */}
+            {selectedRun.error && (
+              <div className="p-3 bg-rose-500/10 border border-rose-500/20 rounded-lg text-rose-400">
+                <p className="font-semibold">Error:</p>
+                <p className="whitespace-pre-wrap">{selectedRun.error}</p>
+              </div>
+            )}
+
+            {/* Step Logs */}
+            <div className="space-y-2">
+              <h3 className="text-xs font-semibold text-coco-text-secondary uppercase tracking-wider mb-2">
+                Steps ({selectedRun.stepLogs.length})
+              </h3>
+              {selectedRun.stepLogs.length === 0 ? (
+                <div className="p-4 bg-coco-bg-tertiary/20 rounded border border-coco-border-subtle border-dashed text-center">
+                    <p className="text-coco-text-tertiary italic">No steps recorded</p>
+                    <p className="text-xs text-coco-text-tertiary mt-1">If this run just started, click Refresh.</p>
+                </div>
+              ) : (
+                selectedRun.stepLogs.map((log, index) => (
+                  <StepLogItem key={index} log={log} />
+                ))
+              )}
+            </div>
+
+            {/* Debug View */}
+            {showDebug && (
+                <div className="mt-8 pt-4 border-t border-coco-border-subtle space-y-4">
+                    <div>
+                        <h3 className="text-xs font-semibold text-coco-text-secondary uppercase tracking-wider mb-2 flex items-center gap-2">
+                            <Activity className="w-3 h-3" /> Run Data
+                        </h3>
+                        <pre className="text-xs bg-black/50 p-4 rounded overflow-auto h-40">
+                            {JSON.stringify(selectedRun, null, 2)}
+                        </pre>
+                    </div>
+
+                    {workflow && (
+                        <div>
+                            <h3 className="text-xs font-semibold text-coco-text-secondary uppercase tracking-wider mb-2 flex items-center gap-2">
+                                <FileJson className="w-3 h-3" /> Workflow Definition (Backend)
+                            </h3>
+                            <div className="text-xs text-coco-text-tertiary mb-2">
+                                Check if this matches your canvas. If empty/stale, Save didn't work.
+                            </div>
+                            <pre className="text-xs bg-black/50 p-4 rounded overflow-auto h-60">
+                                {workflow.definition}
+                            </pre>
+                        </div>
+                    )}
+                </div>
+            )}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function StepLogItem({ log }: { log: WorkflowStepLog }) {
+  const [isOpen, setIsOpen] = useState(false);
+
+  return (
+    <div className="border border-coco-border-subtle rounded-lg bg-coco-bg-primary overflow-hidden">
+      <button
+        onClick={() => setIsOpen(!isOpen)}
+        className="w-full flex items-center justify-between p-2 hover:bg-coco-bg-tertiary transition-colors"
+      >
+        <div className="flex items-center gap-2">
+          {isOpen ? <ChevronDown className="w-4 h-4" /> : <ChevronRight className="w-4 h-4" />}
+          <StatusIcon status={log.status} className="w-4 h-4" />
+          <span className="font-medium text-coco-text-primary">
+            {log.nodeName || log.nodeType}
+          </span>
+          <span className="text-xs text-coco-text-tertiary bg-coco-bg-tertiary px-1.5 py-0.5 rounded">
+            {log.nodeType}
+          </span>
+        </div>
+        <div className="flex items-center gap-3">
+          {log.error && <span className="text-xs text-rose-400">Failed</span>}
+        </div>
+      </button>
+
+      {isOpen && (
+        <div className="p-3 border-t border-coco-border-subtle space-y-3 bg-coco-bg-elevated">
+          {log.error && (
+            <div>
+              <span className="text-xs font-semibold text-rose-400 block mb-1">Error</span>
+              <pre className="text-xs bg-coco-bg-primary p-2 rounded text-rose-300 overflow-x-auto">
+                {log.error}
+              </pre>
+            </div>
+          )}
+          
+          {!!log.input && (
+            <div>
+              <span className="text-xs font-semibold text-coco-text-secondary block mb-1">Input</span>
+              <pre className="text-xs bg-coco-bg-primary p-2 rounded text-coco-text-primary overflow-x-auto">
+                {JSON.stringify(log.input, null, 2)}
+              </pre>
+            </div>
+          )}
+
+          {!!log.output && (
+            <div>
+              <span className="text-xs font-semibold text-coco-text-secondary block mb-1">Output</span>
+              <pre className="text-xs bg-coco-bg-primary p-2 rounded text-coco-text-primary overflow-x-auto">
+                {JSON.stringify(log.output, null, 2)}
+              </pre>
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function StatusIcon({ status, className }: { status: string; className?: string }) {
+  switch (status) {
+    case 'completed':
+    case 'success':
+      return <CheckCircle className={clsx("text-emerald-400", className)} />;
+    case 'failed':
+      return <XCircle className={clsx("text-rose-400", className)} />;
+    case 'running':
+    case 'pending': // Handle pending effectively as waiting for run
+      return <Activity className={clsx("text-blue-400", status === 'running' && "animate-pulse", className)} />;
+    default:
+      return <Clock className={clsx("text-coco-text-tertiary", className)} />;
+  }
+}
