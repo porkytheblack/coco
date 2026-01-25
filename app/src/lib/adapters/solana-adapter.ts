@@ -572,6 +572,7 @@ export const solanaAdapter: ChainAdapter = {
         txHash: tx,
         blockNumber: txInfo?.slot,
         gasUsed: txInfo?.meta?.computeUnitsConsumed?.toString(),
+        fee: txInfo?.meta?.fee?.toString(),
       };
     } catch (error) {
       console.error('[Solana sendTransaction] Error:', error);

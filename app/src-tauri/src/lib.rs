@@ -7,7 +7,10 @@ pub mod types;
 
 use adapters::AdapterRegistry;
 use db::DbPool;
-use services::{ChainService, RunService, WalletService, WorkspaceService};
+use services::{
+    BlockchainService, ChainService, ContractDocService, ConversationService, EnvService,
+    PreferenceService, RunService, ScriptService, WalletService, WorkspaceService, WorkflowService,
+};
 use std::sync::Arc;
 use tauri::Manager;
 use tokio::sync::RwLock;
@@ -23,6 +26,14 @@ pub struct AppState {
     pub workspace_service: Arc<WorkspaceService>,
     pub run_service: Arc<RunService>,
     pub adapter_registry: Arc<RwLock<AdapterRegistry>>,
+    // v0.0.3 services
+    pub blockchain_service: Arc<BlockchainService>,
+    pub script_service: Arc<ScriptService>,
+    pub env_service: Arc<EnvService>,
+    pub conversation_service: Arc<ConversationService>,
+    pub preference_service: Arc<PreferenceService>,
+    pub contract_doc_service: Arc<ContractDocService>,
+    pub workflow_service: Arc<WorkflowService>,
 }
 
 impl AppState {
@@ -30,11 +41,20 @@ impl AppState {
         // Create adapter registry
         let adapter_registry = Arc::new(RwLock::new(AdapterRegistry::new()));
 
-        // Create services with database pool
+        // Create legacy services with database pool
         let chain_service = Arc::new(ChainService::new(db_pool.clone(), adapter_registry.clone()));
         let wallet_service = Arc::new(WalletService::new(db_pool.clone(), adapter_registry.clone()));
         let workspace_service = Arc::new(WorkspaceService::new(db_pool.clone()));
         let run_service = Arc::new(RunService::new(db_pool.clone()));
+
+        // Create v0.0.3 services
+        let blockchain_service = Arc::new(BlockchainService::new(db_pool.clone()));
+        let script_service = Arc::new(ScriptService::new(db_pool.clone()));
+        let env_service = Arc::new(EnvService::new(db_pool.clone()));
+        let conversation_service = Arc::new(ConversationService::new(db_pool.clone()));
+        let preference_service = Arc::new(PreferenceService::new(db_pool.clone()));
+        let contract_doc_service = Arc::new(ContractDocService::new(db_pool.clone()));
+        let workflow_service = Arc::new(WorkflowService::new(db_pool.clone()));
 
         Self {
             db_pool,
@@ -43,6 +63,13 @@ impl AppState {
             workspace_service,
             run_service,
             adapter_registry,
+            blockchain_service,
+            script_service,
+            env_service,
+            conversation_service,
+            preference_service,
+            contract_doc_service,
+            workflow_service,
         }
     }
 }
@@ -85,7 +112,7 @@ pub fn run() {
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
-            // Chain commands
+            // Chain commands (legacy)
             commands::chains::list_chains,
             commands::chains::get_chain,
             commands::chains::create_chain,
@@ -118,13 +145,96 @@ pub fn run() {
             commands::workspaces::execute_transaction,
             commands::workspaces::save_transaction_run,
             commands::workspaces::list_transaction_runs,
-            // Run commands
+            commands::workspaces::update_transaction_run_explanation,
+            // Run commands (legacy)
             commands::runs::start_build,
             commands::runs::start_test,
             commands::runs::start_deploy,
             commands::runs::cancel_run,
             commands::runs::list_runs,
             commands::runs::get_run_detail,
+            // v0.0.3: Blockchain/Network commands
+            commands::blockchains::list_blockchains,
+            commands::blockchains::get_blockchain,
+            commands::blockchains::create_blockchain,
+            commands::blockchains::delete_blockchain,
+            commands::blockchains::list_networks,
+            commands::blockchains::get_network,
+            commands::blockchains::create_network,
+            commands::blockchains::update_network,
+            commands::blockchains::delete_network,
+            commands::blockchains::get_blockchain_ecosystem,
+            // v0.0.3: Script commands
+            commands::scripts::list_scripts,
+            commands::scripts::get_script,
+            commands::scripts::create_script,
+            commands::scripts::update_script,
+            commands::scripts::delete_script,
+            commands::scripts::list_script_flags,
+            commands::scripts::create_script_flag,
+            commands::scripts::update_script_flag,
+            commands::scripts::delete_script_flag,
+            commands::scripts::run_script,
+            commands::scripts::start_script_async,
+            commands::scripts::cancel_script_run,
+            commands::scripts::list_script_runs,
+            commands::scripts::get_script_run,
+            commands::scripts::get_script_run_logs,
+            // v0.0.3: Environment variable commands
+            commands::env::list_env_vars,
+            commands::env::list_env_vars_with_values,
+            commands::env::get_env_var,
+            commands::env::get_env_value,
+            commands::env::create_env_var,
+            commands::env::update_env_var,
+            commands::env::delete_env_var,
+            // v0.0.3: Conversation commands
+            commands::conversations::list_conversations,
+            commands::conversations::get_conversation,
+            commands::conversations::create_conversation,
+            commands::conversations::update_conversation,
+            commands::conversations::delete_conversation,
+            commands::conversations::list_messages,
+            commands::conversations::get_message,
+            commands::conversations::add_message,
+            commands::conversations::delete_message,
+            commands::conversations::clear_conversation_messages,
+            // v0.0.3: Preference commands
+            commands::preferences::get_preference,
+            commands::preferences::set_preference,
+            commands::preferences::delete_preference,
+            commands::preferences::list_preferences,
+            commands::preferences::get_theme,
+            commands::preferences::set_theme,
+            commands::preferences::get_ai_settings,
+            commands::preferences::set_ai_settings,
+            commands::preferences::get_active_workspace,
+            commands::preferences::set_active_workspace,
+            commands::preferences::get_active_network,
+            commands::preferences::set_active_network,
+            // v0.0.3: Contract documentation commands
+            commands::contract_docs::get_contract_docs,
+            commands::contract_docs::get_function_doc,
+            commands::contract_docs::upsert_contract_doc,
+            commands::contract_docs::delete_contract_doc,
+            commands::contract_docs::delete_function_doc,
+            // v0.0.4: Workflow commands
+            commands::workflows::list_workflows,
+            commands::workflows::get_workflow,
+            commands::workflows::create_workflow,
+            commands::workflows::update_workflow,
+            commands::workflows::delete_workflow,
+            commands::workflows::list_workflow_runs,
+            commands::workflows::get_workflow_run,
+            commands::workflows::run_workflow,
+            commands::workflows::pause_workflow_run,
+            commands::workflows::resume_workflow_run,
+            commands::workflows::cancel_workflow_run,
+            commands::workflows::get_workflow_step_executions,
+            commands::workflows::update_workflow_run_status,
+            commands::workflows::update_workflow_run_step_logs,
+            // v0.0.5: Adapter commands
+            commands::adapters::execute_adapter,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

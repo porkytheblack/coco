@@ -518,31 +518,18 @@ export function TransactionPanel({
                   />
                 </div>
               ))
-            ) : ecosystem !== 'solana' ? (
-              <>
-                <div>
-                  <label className="block text-xs text-coco-text-tertiary mb-1">to (address)</label>
-                  <input
-                    type="text"
-                    placeholder="0x..."
-                    value={payload.to || ''}
-                    onChange={(e) => handlePayloadChange('to', e.target.value)}
-                    className="w-full px-3 py-2 text-sm bg-coco-bg-primary border border-coco-border-default rounded-md focus:outline-none focus:ring-2 focus:ring-coco-accent font-mono"
-                    disabled={isExecuting}
-                  />
-                </div>
-                <div>
-                  <label className="block text-xs text-coco-text-tertiary mb-1">amount</label>
-                  <input
-                    type="text"
-                    placeholder="1000000000000000000"
-                    value={payload.amount || ''}
-                    onChange={(e) => handlePayloadChange('amount', e.target.value)}
-                    className="w-full px-3 py-2 text-sm bg-coco-bg-primary border border-coco-border-default rounded-md focus:outline-none focus:ring-2 focus:ring-coco-accent font-mono"
-                    disabled={isExecuting}
-                  />
-                </div>
-              </>
+            ) : contractFunction && contractFunction.inputs.length === 0 ? (
+              <p className="text-sm text-coco-text-tertiary text-center py-2">
+                This function has no parameters.
+              </p>
+            ) : !transaction.contract ? (
+              <p className="text-sm text-coco-text-tertiary text-center py-2">
+                No contract selected. Add a contract to this transaction to see its parameters.
+              </p>
+            ) : !transaction.functionName ? (
+              <p className="text-sm text-coco-text-tertiary text-center py-2">
+                No function selected. Select a function from the contract to see its parameters.
+              </p>
             ) : null}
           </div>
         )}
@@ -749,6 +736,8 @@ export function TransactionPanel({
                           <ErrorExplanation
                             errorMessage={run.errorMessage}
                             context={{ ecosystem }}
+                            runId={run.id}
+                            savedExplanation={run.aiExplanation}
                           />
                         </div>
                       )}

@@ -1,18 +1,39 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import { useForm } from 'react-hook-form';
+import { zodResolver } from '@hookform/resolvers/zod';
+import { z } from 'zod';
 import { FileCode, Sparkles, Loader2 } from 'lucide-react';
 import Image from 'next/image';
 import { Button, Input, Modal } from '@/components/ui';
 import { MoveDefinitionBuilder } from './move-definition-builder';
 import { useAIStore } from '@/stores';
 import { aiService } from '@/lib/ai';
-import type { InterfaceType, AddContractRequest, MoveDefinition, ContractWithChain } from '@/types';
-import * as tauri from '@/lib/tauri';
+import { useAddContract, useReusableContracts } from '@/hooks';
+import type { InterfaceType, AddContractRequest, MoveDefinition } from '@/types';
 
 type ContractMode = 'new' | 'reuse';
 type MoveInputMode = 'manual' | 'ai';
 type AnchorIdlVersion = 'legacy' | 'new';
+
+// Zod schema for new contract form
+const newContractSchema = z.object({
+  name: z.string().min(1, 'Contract name is required').max(100, 'Name is too long'),
+  address: z.string().min(1, 'Contract address is required'),
+  abiJson: z.string().optional(),
+  idlJson: z.string().optional(),
+});
+
+// Zod schema for reuse contract form
+const reuseContractSchema = z.object({
+  selectedContractId: z.string().min(1, 'Please select a contract to reuse'),
+  name: z.string().optional(),
+  address: z.string().min(1, 'Contract address is required'),
+});
+
+type NewContractInput = z.infer<typeof newContractSchema>;
+type ReuseContractInput = z.infer<typeof reuseContractSchema>;
 
 // Example IDL placeholders for different Anchor versions
 const ANCHOR_IDL_EXAMPLES = {
@@ -55,10 +76,11 @@ const ANCHOR_IDL_EXAMPLES = {
 interface AddContractModalProps {
   isOpen: boolean;
   onClose: () => void;
-  onAdd: (request: AddContractRequest) => Promise<void>;
+  onAdd?: (request: AddContractRequest) => Promise<void>;
   ecosystem: 'evm' | 'solana' | 'aptos';
   blockchain: string;
   chainId: string;
+  workspaceId: string;
 }
 
 export function AddContractModal({
@@ -68,54 +90,77 @@ export function AddContractModal({
   ecosystem,
   blockchain,
   chainId,
+  workspaceId,
 }: AddContractModalProps) {
+  // UI state (not form data)
   const [mode, setMode] = useState<ContractMode>('new');
-  const [name, setName] = useState('');
-  const [address, setAddress] = useState('');
-  const [abiJson, setAbiJson] = useState('');
-  const [idlJson, setIdlJson] = useState('');
   const [idlVersion, setIdlVersion] = useState<AnchorIdlVersion>('new');
+  const [moveInputMode, setMoveInputMode] = useState<MoveInputMode>('manual');
+  const [error, setError] = useState<string | null>(null);
+
+  // Move definition (complex nested state, kept separate)
   const [moveDefinition, setMoveDefinition] = useState<MoveDefinition>({
     moduleName: '',
     moduleAddress: '',
     functions: [],
     structs: [],
   });
-  const [isLoading, setIsLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
 
   // AI state
   const { settings: aiSettings } = useAIStore();
-  const [moveInputMode, setMoveInputMode] = useState<MoveInputMode>('manual');
   const [moveSourceCode, setMoveSourceCode] = useState('');
   const [evmSourceCode, setEvmSourceCode] = useState('');
   const [isAIProcessing, setIsAIProcessing] = useState(false);
   const [aiError, setAIError] = useState<string | null>(null);
 
-  // Reuse mode state
-  const [reusableContracts, setReusableContracts] = useState<ContractWithChain[]>([]);
-  const [selectedContractId, setSelectedContractId] = useState<string | null>(null);
-  const [loadingContracts, setLoadingContracts] = useState(false);
+  // TanStack Query hooks
+  const addContract = useAddContract();
+  const { data: reusableContracts = [], isLoading: loadingContracts } = useReusableContracts(
+    mode === 'reuse' ? blockchain : undefined,
+    mode === 'reuse' ? chainId : undefined
+  );
 
-  // Load reusable contracts when modal opens or mode changes to reuse
+  // New contract form
+  const newForm = useForm<NewContractInput>({
+    resolver: zodResolver(newContractSchema),
+    defaultValues: {
+      name: '',
+      address: '',
+      abiJson: '',
+      idlJson: '',
+    },
+  });
+
+  // Reuse contract form
+  const reuseForm = useForm<ReuseContractInput>({
+    resolver: zodResolver(reuseContractSchema),
+    defaultValues: {
+      selectedContractId: '',
+      name: '',
+      address: '',
+    },
+  });
+
+  // Reset forms when modal opens/closes
   useEffect(() => {
-    if (isOpen && mode === 'reuse' && blockchain) {
-      loadReusableContracts();
+    if (isOpen) {
+      newForm.reset({ name: '', address: '', abiJson: '', idlJson: '' });
+      reuseForm.reset({ selectedContractId: '', name: '', address: '' });
+      setMode('new');
+      setIdlVersion('new');
+      setMoveInputMode('manual');
+      setMoveDefinition({
+        moduleName: '',
+        moduleAddress: '',
+        functions: [],
+        structs: [],
+      });
+      setMoveSourceCode('');
+      setEvmSourceCode('');
+      setError(null);
+      setAIError(null);
     }
-  }, [isOpen, mode, blockchain, chainId]);
-
-  const loadReusableContracts = async () => {
-    setLoadingContracts(true);
-    try {
-      const contracts = await tauri.listReusableContracts(blockchain, chainId);
-      setReusableContracts(contracts);
-    } catch (err) {
-      console.error('Failed to load reusable contracts:', err);
-      setReusableContracts([]);
-    } finally {
-      setLoadingContracts(false);
-    }
-  };
+  }, [isOpen]);
 
   // Determine interface type based on ecosystem
   const getInterfaceType = (): InterfaceType => {
@@ -131,74 +176,15 @@ export function AddContractModal({
     }
   };
 
-  const handleAdd = async () => {
-    // Handle reuse mode
-    if (mode === 'reuse') {
-      if (!selectedContractId) {
-        setError('Please select a contract to reuse');
-        return;
-      }
+  // Handle new contract submission
+  const handleNewContract = async (data: NewContractInput) => {
+    setError(null);
 
-      const selectedContract = reusableContracts.find(c => c.id === selectedContractId);
-      if (!selectedContract) {
-        setError('Selected contract not found');
-        return;
-      }
-
-      if (!address.trim()) {
-        setError('Contract address is required for the new chain');
-        return;
-      }
-
-      setIsLoading(true);
-      setError(null);
-
+    // Validate ABI JSON format for EVM
+    if (ecosystem === 'evm' && data.abiJson?.trim()) {
       try {
-        // Parse the ABI from the selected contract
-        let parsedAbi: object[] | undefined;
-        if (selectedContract.abi) {
-          try {
-            parsedAbi = JSON.parse(selectedContract.abi);
-          } catch {
-            // Use as-is if it's already an object
-          }
-        }
-
-        const request: AddContractRequest = {
-          workspaceId: '', // Will be set by the store
-          name: name.trim() || selectedContract.name,
-          address: address.trim(),
-          interfaceType: getInterfaceType(),
-          abi: parsedAbi,
-        };
-        await onAdd(request);
-        handleClose();
-      } catch (err) {
-        setError((err as Error).message);
-      } finally {
-        setIsLoading(false);
-      }
-      return;
-    }
-
-    // Handle new contract mode
-    if (!name.trim()) {
-      setError('Contract name is required');
-      return;
-    }
-    if (!address.trim()) {
-      setError('Contract address is required');
-      return;
-    }
-
-    // Validate interface based on ecosystem
-    let parsedAbi: object[] | undefined;
-    let parsedIdl: object | undefined;
-
-    if (ecosystem === 'evm' && abiJson.trim()) {
-      try {
-        parsedAbi = JSON.parse(abiJson);
-        if (!Array.isArray(parsedAbi)) {
+        const parsed = JSON.parse(data.abiJson);
+        if (!Array.isArray(parsed)) {
           setError('ABI must be a JSON array');
           return;
         }
@@ -208,15 +194,17 @@ export function AddContractModal({
       }
     }
 
-    if (ecosystem === 'solana' && idlJson.trim()) {
+    // Validate IDL JSON format for Solana
+    if (ecosystem === 'solana' && data.idlJson?.trim()) {
       try {
-        parsedIdl = JSON.parse(idlJson);
+        JSON.parse(data.idlJson);
       } catch {
         setError('Invalid IDL JSON format');
         return;
       }
     }
 
+    // Validate Move definition for Aptos
     if (ecosystem === 'aptos') {
       if (!moveDefinition.moduleName.trim()) {
         setError('Module name is required for Move contracts');
@@ -228,34 +216,95 @@ export function AddContractModal({
       }
     }
 
-    setIsLoading(true);
-    setError(null);
-
     try {
-      const request: AddContractRequest = {
-        workspaceId: '', // Will be set by the store
-        name: name.trim(),
-        address: address.trim(),
-        interfaceType: getInterfaceType(),
-        abi: parsedAbi,
-        idl: parsedIdl,
-        moveDefinition: ecosystem === 'aptos' ? moveDefinition : undefined,
-      };
-      await onAdd(request);
+      if (onAdd) {
+        // Use the callback if provided (maintains backward compatibility)
+        const request: AddContractRequest = {
+          workspaceId,
+          name: data.name.trim(),
+          address: data.address.trim(),
+          interfaceType: getInterfaceType(),
+          abi: data.abiJson?.trim() ? JSON.parse(data.abiJson) : undefined,
+          idl: data.idlJson?.trim() ? JSON.parse(data.idlJson) : undefined,
+          moveDefinition: ecosystem === 'aptos' ? moveDefinition : undefined,
+        };
+        await onAdd(request);
+      } else {
+        // Use the TanStack Query mutation
+        await addContract.mutateAsync({
+          workspaceId,
+          name: data.name.trim(),
+          address: data.address.trim(),
+          interfaceType: getInterfaceType(),
+          abi: data.abiJson?.trim() || undefined,
+          idl: data.idlJson?.trim() || undefined,
+          moveDefinition: ecosystem === 'aptos' ? JSON.stringify(moveDefinition) : undefined,
+        });
+      }
       handleClose();
     } catch (err) {
       setError((err as Error).message);
-    } finally {
-      setIsLoading(false);
+    }
+  };
+
+  // Handle reuse contract submission
+  const handleReuseContract = async (data: ReuseContractInput) => {
+    setError(null);
+
+    const selectedContract = reusableContracts.find(c => c.id === data.selectedContractId);
+    if (!selectedContract) {
+      setError('Selected contract not found');
+      return;
+    }
+
+    try {
+      if (onAdd) {
+        // Parse the ABI for the callback (maintains backward compatibility)
+        let parsedAbi: object[] | undefined;
+        if (selectedContract.abi) {
+          try {
+            parsedAbi = JSON.parse(selectedContract.abi);
+          } catch {
+            // Use as-is if it's already an object
+          }
+        }
+
+        const request: AddContractRequest = {
+          workspaceId,
+          name: data.name?.trim() || selectedContract.name,
+          address: data.address.trim(),
+          interfaceType: getInterfaceType(),
+          abi: parsedAbi,
+        };
+        await onAdd(request);
+      } else {
+        // Use the TanStack Query mutation - pass abi as string
+        await addContract.mutateAsync({
+          workspaceId,
+          name: data.name?.trim() || selectedContract.name,
+          address: data.address.trim(),
+          interfaceType: getInterfaceType(),
+          abi: selectedContract.abi || undefined,
+        });
+      }
+      handleClose();
+    } catch (err) {
+      setError((err as Error).message);
+    }
+  };
+
+  const handleSubmit = () => {
+    if (mode === 'new') {
+      newForm.handleSubmit(handleNewContract)();
+    } else {
+      reuseForm.handleSubmit(handleReuseContract)();
     }
   };
 
   const handleClose = () => {
+    newForm.reset();
+    reuseForm.reset();
     setMode('new');
-    setName('');
-    setAddress('');
-    setAbiJson('');
-    setIdlJson('');
     setIdlVersion('new');
     setMoveDefinition({
       moduleName: '',
@@ -264,8 +313,6 @@ export function AddContractModal({
       structs: [],
     });
     setError(null);
-    setSelectedContractId(null);
-    setReusableContracts([]);
     setMoveInputMode('manual');
     setMoveSourceCode('');
     setEvmSourceCode('');
@@ -315,7 +362,7 @@ export function AddContractModal({
       const result = await aiService.generateABI(evmSourceCode);
 
       if (result.success && result.abi) {
-        setAbiJson(JSON.stringify(result.abi, null, 2));
+        newForm.setValue('abiJson', JSON.stringify(result.abi, null, 2));
         setEvmSourceCode(''); // Clear source after successful generation
       } else {
         setAIError(result.error || 'Failed to generate ABI');
@@ -367,6 +414,15 @@ export function AddContractModal({
     return `${addr.slice(0, 6)}...${addr.slice(-4)}`;
   };
 
+  const isLoading = newForm.formState.isSubmitting ||
+    reuseForm.formState.isSubmitting ||
+    addContract.isPending;
+
+  // Watch form values for conditional rendering
+  const abiJson = newForm.watch('abiJson');
+  const idlJson = newForm.watch('idlJson');
+  const selectedContractId = reuseForm.watch('selectedContractId');
+
   return (
     <Modal
       isOpen={isOpen}
@@ -378,7 +434,7 @@ export function AddContractModal({
           <Button variant="secondary" onClick={handleClose} disabled={isLoading}>
             Cancel
           </Button>
-          <Button variant="primary" onClick={handleAdd} isLoading={isLoading}>
+          <Button variant="primary" onClick={handleSubmit} isLoading={isLoading}>
             {mode === 'reuse' ? 'Add to Workspace' : 'Add Contract'}
           </Button>
         </>
@@ -443,7 +499,7 @@ export function AddContractModal({
                       <button
                         key={contract.id}
                         type="button"
-                        onClick={() => setSelectedContractId(contract.id)}
+                        onClick={() => reuseForm.setValue('selectedContractId', contract.id)}
                         className={`w-full p-3 text-left rounded-md border transition-colors ${
                           selectedContractId === contract.id
                             ? 'border-coco-accent bg-coco-accent/10'
@@ -467,20 +523,22 @@ export function AddContractModal({
                       </button>
                     ))}
                   </div>
+                  {reuseForm.formState.errors.selectedContractId && (
+                    <p className="text-xs text-coco-error">{reuseForm.formState.errors.selectedContractId.message}</p>
+                  )}
                 </div>
 
                 <Input
                   label="Contract Name (optional)"
                   placeholder={reusableContracts.find(c => c.id === selectedContractId)?.name || 'Contract'}
-                  value={name}
-                  onChange={(e) => setName(e.target.value)}
+                  {...reuseForm.register('name')}
                 />
 
                 <Input
                   label={`${getAddressLabel()} (on this chain)`}
                   placeholder={getAddressPlaceholder()}
-                  value={address}
-                  onChange={(e) => setAddress(e.target.value)}
+                  {...reuseForm.register('address')}
+                  error={reuseForm.formState.errors.address?.message}
                 />
 
                 <p className="text-xs text-coco-text-tertiary">
@@ -498,15 +556,15 @@ export function AddContractModal({
             <Input
               label="Contract Name"
               placeholder="Token"
-              value={name}
-              onChange={(e) => setName(e.target.value)}
+              {...newForm.register('name')}
+              error={newForm.formState.errors.name?.message}
             />
 
             <Input
               label={getAddressLabel()}
               placeholder={getAddressPlaceholder()}
-              value={address}
-              onChange={(e) => setAddress(e.target.value)}
+              {...newForm.register('address')}
+              error={newForm.formState.errors.address?.message}
             />
 
             {/* Interface input based on ecosystem */}
@@ -575,8 +633,7 @@ contract Token {
                 ) : (
                   <>
                     <textarea
-                      value={abiJson}
-                      onChange={(e) => setAbiJson(e.target.value)}
+                      {...newForm.register('abiJson')}
                       placeholder='[{"type":"function","name":"transfer",...}]'
                       className="w-full h-40 px-3 py-2 text-sm font-mono bg-coco-bg-primary border border-coco-border-default rounded-md focus:outline-none focus:ring-2 focus:ring-coco-accent resize-none"
                     />
@@ -607,8 +664,7 @@ contract Token {
                   </div>
                 </div>
                 <textarea
-                  value={idlJson}
-                  onChange={(e) => setIdlJson(e.target.value)}
+                  {...newForm.register('idlJson')}
                   placeholder={ANCHOR_IDL_EXAMPLES[idlVersion]}
                   className="w-full h-48 px-3 py-2 text-sm font-mono bg-coco-bg-primary border border-coco-border-default rounded-md focus:outline-none focus:ring-2 focus:ring-coco-accent resize-none"
                 />

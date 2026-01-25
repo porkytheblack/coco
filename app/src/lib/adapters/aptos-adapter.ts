@@ -201,11 +201,20 @@ export const aptosAdapter: ChainAdapter = {
         transactionHash: pendingTx.hash,
       });
 
+      // Calculate fee from gas_used and gas_unit_price
+      const gasUsed = (committedTx as { gas_used?: string }).gas_used;
+      const gasUnitPrice = (committedTx as { gas_unit_price?: string }).gas_unit_price;
+      const fee = gasUsed && gasUnitPrice
+        ? String(Number(gasUsed) * Number(gasUnitPrice))
+        : undefined;
+
       return {
         success: true,
         txHash: pendingTx.hash,
         blockNumber: Number((committedTx as { version?: string }).version || 0),
-        gasUsed: String((committedTx as { gas_used?: string }).gas_used || '0'),
+        gasUsed: String(gasUsed || '0'),
+        gasPrice: gasUnitPrice,
+        fee,
       };
     } catch (error) {
       console.error('[Aptos sendTransaction] Error:', error);

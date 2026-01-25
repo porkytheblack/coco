@@ -3,73 +3,103 @@
 @tailwind utilities;
 
 :root {
-  /* Tokyo Night Light Mode */
-  --coco-bg-primary: #D5D6DB;
-  --coco-bg-secondary: #CBCCD1;
-  --coco-bg-tertiary: #C0C1C6;
-  --coco-bg-elevated: #DFE0E5;
+  /* Light Mode - Clean, modern, professional */
+  --coco-bg-primary: #FFFFFF;
+  --coco-bg-secondary: #F8FAFC;
+  --coco-bg-tertiary: #F1F5F9;
+  --coco-bg-elevated: #FFFFFF;
+  --coco-bg-inset: #E2E8F0;
 
-  --coco-border-subtle: #B4B5BA;
-  --coco-border-default: #9699A3;
-  --coco-border-strong: #787C87;
+  --coco-border-subtle: #E2E8F0;
+  --coco-border-default: #CBD5E1;
+  --coco-border-strong: #94A3B8;
 
-  --coco-text-primary: #343B58;
-  --coco-text-secondary: #4C505E;
-  --coco-text-tertiary: #9699A3;
-  --coco-text-inverse: #D5D6DB;
+  --coco-text-primary: #0F172A;
+  --coco-text-secondary: #475569;
+  --coco-text-tertiary: #94A3B8;
+  --coco-text-inverse: #FFFFFF;
 
-  --coco-accent: #34548A;
-  --coco-accent-hover: #2E4A7A;
-  --coco-accent-subtle: #B4C4E0;
+  /* Primary accent - vibrant green */
+  --coco-accent: #16A34A;
+  --coco-accent-hover: #15803D;
+  --coco-accent-subtle: #DCFCE7;
+  --coco-accent-glow: rgba(22, 163, 74, 0.15);
 
-  --coco-success: #33635C;
-  --coco-success-subtle: #C4E0DB;
-  --coco-error: #8C4351;
-  --coco-error-subtle: #E5C4C9;
-  --coco-warning: #8F5E15;
-  --coco-warning-subtle: #E5D8C4;
-  --coco-pending: #6A6E7A;
-  --coco-pending-subtle: #CBCCD1;
+  /* Secondary accent - blue */
+  --coco-secondary: #3B82F6;
+  --coco-secondary-hover: #2563EB;
+  --coco-secondary-subtle: #DBEAFE;
 
-  --coco-shadow-sm: 0 1px 2px rgba(52, 59, 88, 0.08);
-  --coco-shadow-md: 0 4px 6px -1px rgba(52, 59, 88, 0.12);
-  --coco-shadow-lg: 0 10px 15px -3px rgba(52, 59, 88, 0.15);
-  --coco-shadow-drawer: -4px 0 24px rgba(52, 59, 88, 0.15);
+  /* Status colors */
+  --coco-success: #16A34A;
+  --coco-success-subtle: #DCFCE7;
+  --coco-error: #DC2626;
+  --coco-error-subtle: #FEE2E2;
+  --coco-warning: #D97706;
+  --coco-warning-subtle: #FEF3C7;
+  --coco-pending: #64748B;
+  --coco-pending-subtle: #F1F5F9;
+
+  /* Shadows - subtle and modern */
+  --coco-shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.04);
+  --coco-shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.06), 0 2px 4px -2px rgba(0, 0, 0, 0.04);
+  --coco-shadow-lg: 0 10px 15px -3px rgba(0, 0, 0, 0.08), 0 4px 6px -4px rgba(0, 0, 0, 0.04);
+  --coco-shadow-drawer: -4px 0 24px rgba(0, 0, 0, 0.08);
+  --coco-shadow-glow: 0 0 20px var(--coco-accent-glow);
+
+  /* Gradient */
+  --coco-gradient-accent: linear-gradient(135deg, #16A34A 0%, #22D3EE 100%);
+  --coco-gradient-bg: linear-gradient(180deg, #FFFFFF 0%, #F8FAFC 100%);
 }
 
 .dark {
-  /* Tokyo Night Dark Mode */
-  --coco-bg-primary: #1A1B26;
-  --coco-bg-secondary: #16161E;
-  --coco-bg-tertiary: #232433;
-  --coco-bg-elevated: #1F2030;
+  /* Dark Mode - Trigger.dev inspired */
+  --coco-bg-primary: #0A0A0B;
+  --coco-bg-secondary: #0F0F10;
+  --coco-bg-tertiary: #18181B;
+  --coco-bg-elevated: #121214;
+  --coco-bg-inset: #09090A;
 
-  --coco-border-subtle: #292E42;
-  --coco-border-default: #3B4261;
-  --coco-border-strong: #545C7E;
+  --coco-border-subtle: #1F1F23;
+  --coco-border-default: #27272A;
+  --coco-border-strong: #3F3F46;
 
-  --coco-text-primary: #C0CAF5;
-  --coco-text-secondary: #A9B1D6;
-  --coco-text-tertiary: #565F89;
-  --coco-text-inverse: #1A1B26;
+  --coco-text-primary: #FAFAFA;
+  --coco-text-secondary: #A1A1AA;
+  --coco-text-tertiary: #52525B;
+  --coco-text-inverse: #09090B;
 
-  --coco-accent: #7AA2F7;
-  --coco-accent-hover: #89B4FA;
-  --coco-accent-subtle: #283457;
+  /* Primary accent - vibrant green (Trigger.dev style) */
+  --coco-accent: #22C55E;
+  --coco-accent-hover: #4ADE80;
+  --coco-accent-subtle: rgba(34, 197, 94, 0.15);
+  --coco-accent-glow: rgba(34, 197, 94, 0.25);
 
-  --coco-success: #9ECE6A;
-  --coco-success-subtle: #1E3A2F;
-  --coco-error: #F7768E;
-  --coco-error-subtle: #3D2030;
-  --coco-warning: #E0AF68;
-  --coco-warning-subtle: #3D3020;
-  --coco-pending: #A9B1D6;
-  --coco-pending-subtle: #292E42;
+  /* Secondary accent - electric blue/cyan */
+  --coco-secondary: #38BDF8;
+  --coco-secondary-hover: #7DD3FC;
+  --coco-secondary-subtle: rgba(56, 189, 248, 0.15);
 
-  --coco-shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.4);
-  --coco-shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.5);
-  --coco-shadow-lg: 0 10px 15px -3px rgba(0, 0, 0, 0.6);
-  --coco-shadow-drawer: -4px 0 24px rgba(0, 0, 0, 0.6);
+  /* Status colors */
+  --coco-success: #22C55E;
+  --coco-success-subtle: rgba(34, 197, 94, 0.15);
+  --coco-error: #EF4444;
+  --coco-error-subtle: rgba(239, 68, 68, 0.15);
+  --coco-warning: #F59E0B;
+  --coco-warning-subtle: rgba(245, 158, 11, 0.15);
+  --coco-pending: #71717A;
+  --coco-pending-subtle: rgba(113, 113, 122, 0.15);
+
+  /* Shadows - with subtle glow effects */
+  --coco-shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.5);
+  --coco-shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.6), 0 2px 4px -2px rgba(0, 0, 0, 0.4);
+  --coco-shadow-lg: 0 10px 15px -3px rgba(0, 0, 0, 0.7), 0 4px 6px -4px rgba(0, 0, 0, 0.5);
+  --coco-shadow-drawer: -4px 0 24px rgba(0, 0, 0, 0.7);
+  --coco-shadow-glow: 0 0 30px var(--coco-accent-glow);
+
+  /* Gradient */
+  --coco-gradient-accent: linear-gradient(135deg, #22C55E 0%, #38BDF8 100%);
+  --coco-gradient-bg: linear-gradient(180deg, #0F0F10 0%, #0A0A0B 100%);
 }
 
 @layer base {
@@ -78,7 +108,7 @@
   }
 
   body {
-    @apply bg-coco-bg-primary text-coco-text-primary;
+    @apply bg-coco-bg-primary text-coco-text-primary antialiased;
     font-family: 'Sora', -apple-system, BlinkMacSystemFont, sans-serif;
   }
 
@@ -94,12 +124,20 @@
   * {
     @apply border-coco-border-subtle;
   }
+
+  /* Smooth transitions for theme switching */
+  html.transitioning,
+  html.transitioning *,
+  html.transitioning *::before,
+  html.transitioning *::after {
+    transition: background-color 0.3s ease, border-color 0.3s ease, color 0.3s ease !important;
+  }
 }
 
 @layer components {
   /* Badge variants */
   .badge {
-    @apply inline-flex items-center px-2 py-1 text-xs font-medium rounded-full;
+    @apply inline-flex items-center px-2.5 py-1 text-xs font-medium rounded-full;
   }
 
   .badge-wallet {
@@ -126,56 +164,71 @@
     @apply border border-coco-border-default text-coco-text-tertiary bg-transparent;
   }
 
-  /* Card styles */
+  /* Card styles - with hover glow effect */
   .card {
-    @apply bg-coco-bg-elevated border border-coco-border-subtle rounded-lg transition-all duration-base;
+    @apply bg-coco-bg-elevated border border-coco-border-subtle rounded-xl transition-all duration-200;
   }
 
   .card:hover {
-    @apply border-coco-border-default shadow-sm;
+    @apply border-coco-border-default;
+    box-shadow: var(--coco-shadow-md);
+  }
+
+  .card-interactive {
+    @apply card cursor-pointer;
+  }
+
+  .card-interactive:hover {
+    @apply border-coco-accent;
+    box-shadow: var(--coco-shadow-glow);
   }
 
   /* Button base */
   .btn {
-    @apply inline-flex items-center justify-center px-4 py-2 text-sm font-medium rounded-md transition-all duration-base;
+    @apply inline-flex items-center justify-center px-4 py-2 text-sm font-medium rounded-lg transition-all duration-200;
   }
 
   .btn-primary {
     @apply bg-coco-accent text-coco-text-inverse hover:bg-coco-accent-hover;
+    box-shadow: 0 0 0 0 var(--coco-accent-glow);
+  }
+
+  .btn-primary:hover {
+    box-shadow: var(--coco-shadow-glow);
   }
 
   .btn-secondary {
-    @apply bg-coco-bg-tertiary text-coco-text-primary hover:bg-coco-border-subtle;
+    @apply bg-coco-bg-tertiary text-coco-text-primary border border-coco-border-default hover:bg-coco-bg-inset hover:border-coco-border-strong;
   }
 
   .btn-danger {
-    @apply bg-coco-error text-coco-text-inverse hover:bg-red-700;
+    @apply bg-coco-error text-coco-text-inverse hover:bg-red-600;
   }
 
   .btn-ghost {
-    @apply bg-transparent text-coco-text-secondary hover:bg-coco-bg-tertiary;
+    @apply bg-transparent text-coco-text-secondary hover:text-coco-text-primary hover:bg-coco-bg-tertiary;
   }
 
   /* Icon button */
   .icon-btn {
-    @apply w-9 h-9 flex items-center justify-center rounded-md bg-transparent hover:bg-coco-bg-tertiary transition-all duration-base;
+    @apply w-9 h-9 flex items-center justify-center rounded-lg bg-transparent hover:bg-coco-bg-tertiary transition-all duration-200;
   }
 
   /* Input styles */
   .input {
-    @apply w-full px-3 py-2 text-sm bg-coco-bg-primary border border-coco-border-default rounded-md
-           focus:outline-none focus:ring-2 focus:ring-coco-accent focus:border-transparent
-           placeholder:text-coco-text-tertiary;
+    @apply w-full px-3 py-2.5 text-sm bg-coco-bg-primary border border-coco-border-default rounded-lg
+           focus:outline-none focus:ring-2 focus:ring-coco-accent focus:border-coco-accent
+           placeholder:text-coco-text-tertiary transition-all duration-200;
   }
 
   /* Terminal output */
   .terminal {
-    @apply font-mono text-sm bg-[#1a1a1a] text-[#e5e5e5] p-4 rounded-lg leading-relaxed overflow-auto;
+    @apply font-mono text-sm bg-coco-bg-inset text-coco-text-primary p-4 rounded-lg leading-relaxed overflow-auto border border-coco-border-subtle;
   }
 
   /* Sidebar list item */
   .sidebar-item {
-    @apply px-4 py-3 border-b border-coco-border-subtle cursor-pointer transition-all duration-base;
+    @apply px-4 py-3 border-b border-coco-border-subtle cursor-pointer transition-all duration-200;
   }
 
   .sidebar-item:hover {
@@ -183,14 +236,82 @@
   }
 
   .sidebar-item.selected {
-    @apply bg-coco-bg-tertiary border-l-2 border-l-coco-accent;
+    @apply bg-coco-accent-subtle border-l-2 border-l-coco-accent;
+  }
+
+  /* Glow effects */
+  .glow-accent {
+    box-shadow: var(--coco-shadow-glow);
+  }
+
+  .glow-accent-hover:hover {
+    box-shadow: var(--coco-shadow-glow);
+  }
+
+  /* Gradient text */
+  .gradient-text {
+    background: var(--coco-gradient-accent);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+  }
+
+  /* Glass effect (for modals/overlays) */
+  .glass {
+    @apply backdrop-blur-lg bg-coco-bg-elevated/80 border border-coco-border-subtle;
+  }
+
+  /* Divider */
+  .divider {
+    @apply border-t border-coco-border-subtle;
+  }
+
+  /* Tab styles */
+  .tab {
+    @apply px-4 py-2.5 text-sm font-medium text-coco-text-secondary transition-all duration-200 border-b-2 border-transparent;
+  }
+
+  .tab:hover {
+    @apply text-coco-text-primary;
+  }
+
+  .tab.active {
+    @apply text-coco-accent border-coco-accent;
+  }
+
+  /* Tooltip */
+  .tooltip {
+    @apply px-2.5 py-1.5 text-xs font-medium bg-coco-bg-elevated border border-coco-border-subtle rounded-lg shadow-lg;
+  }
+
+  /* Code block */
+  .code-block {
+    @apply font-mono text-sm bg-coco-bg-inset border border-coco-border-subtle rounded-lg p-4 overflow-x-auto;
+  }
+
+  /* Scrollbar styling */
+  .custom-scrollbar::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+  }
+
+  .custom-scrollbar::-webkit-scrollbar-track {
+    @apply bg-transparent;
+  }
+
+  .custom-scrollbar::-webkit-scrollbar-thumb {
+    @apply bg-coco-border-default rounded-full;
+  }
+
+  .custom-scrollbar::-webkit-scrollbar-thumb:hover {
+    @apply bg-coco-border-strong;
   }
 }
 
 @layer utilities {
   /* Focus ring */
   .focus-ring {
-    @apply focus:outline-none focus:ring-2 focus:ring-coco-accent focus:ring-offset-2;
+    @apply focus:outline-none focus:ring-2 focus:ring-coco-accent focus:ring-offset-2 focus:ring-offset-coco-bg-primary;
   }
 
   /* Status dot */
@@ -212,5 +333,57 @@
 
   .status-dot-running {
     @apply bg-coco-accent animate-pulse;
+  }
+
+  /* Shimmer loading effect */
+  .shimmer {
+    @apply relative overflow-hidden;
+  }
+
+  .shimmer::after {
+    content: '';
+    @apply absolute inset-0;
+    background: linear-gradient(
+      90deg,
+      transparent 0%,
+      rgba(255, 255, 255, 0.05) 50%,
+      transparent 100%
+    );
+    animation: shimmer 2s infinite;
+  }
+
+  @keyframes shimmer {
+    0% {
+      transform: translateX(-100%);
+    }
+    100% {
+      transform: translateX(100%);
+    }
+  }
+
+  /* Fade in animation */
+  .animate-fade-in {
+    animation: fadeIn 0.2s ease-out;
+  }
+
+  /* Scale in animation */
+  .animate-scale-in {
+    animation: scaleIn 0.2s ease-out;
+  }
+
+  /* Slide up animation */
+  .animate-slide-up {
+    animation: slideUp 0.3s ease-out;
+  }
+
+  @keyframes slideUp {
+    0% {
+      opacity: 0;
+      transform: translateY(10px);
+    }
+    100% {
+      opacity: 1;
+      transform: translateY(0);
+    }
   }
 }

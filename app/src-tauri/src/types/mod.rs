@@ -71,6 +71,17 @@ impl Default for NetworkType {
     }
 }
 
+impl From<&str> for NetworkType {
+    fn from(s: &str) -> Self {
+        match s.to_lowercase().as_str() {
+            "mainnet" => NetworkType::Mainnet,
+            "testnet" => NetworkType::Testnet,
+            "devnet" => NetworkType::Devnet,
+            _ => NetworkType::Custom,
+        }
+    }
+}
+
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "lowercase")]
 pub enum InterfaceType {
@@ -314,6 +325,14 @@ pub struct DecodedEvent {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+pub struct AIExplanation {
+    pub summary: String,
+    pub details: String,
+    pub suggestions: Vec<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct TransactionRun {
     pub id: String,
     pub transaction_id: String,
@@ -329,6 +348,7 @@ pub struct TransactionRun {
     pub started_at: DateTime<Utc>,
     pub finished_at: Option<DateTime<Utc>>,
     pub duration_ms: Option<u64>,
+    pub ai_explanation: Option<AIExplanation>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -397,4 +417,382 @@ pub struct ChainConfig {
     pub ecosystem: Ecosystem,
     pub rpc_url: String,
     pub native_currency: String,
+}
+
+// ============================================================================
+// v0.0.3 Types - New Schema
+// ============================================================================
+
+/// Blockchain entity (parent of networks)
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Blockchain {
+    pub id: String,
+    pub name: String,
+    pub ecosystem: Ecosystem,
+    pub icon_id: Option<String>,
+    pub created_at: DateTime<Utc>,
+    #[serde(default)]
+    pub networks: Vec<Network>,
+}
+
+/// Network entity (belongs to a blockchain)
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Network {
+    pub id: String,
+    pub blockchain_id: String,
+    pub name: String,
+    pub network_type: NetworkType,
+    pub rpc_url: String,
+    pub chain_id_numeric: Option<u64>,
+    #[serde(rename = "blockExplorerUrl")]
+    pub explorer_url: Option<String>,
+    #[serde(rename = "blockExplorerApiUrl")]
+    pub explorer_api_url: Option<String>,
+    #[serde(rename = "blockExplorerApiKey")]
+    pub explorer_api_key: Option<String>,
+    pub faucet_url: Option<String>,
+    #[serde(rename = "nativeCurrency")]
+    pub currency_symbol: String,
+    pub currency_decimals: u8,
+    pub is_default: bool,
+    pub created_at: DateTime<Utc>,
+}
+
+/// Script runner type
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "kebab-case")]
+pub enum ScriptRunner {
+    Bash,
+    Node,
+    Bun,
+    Python,
+    Forge,       // forge script (for deployment scripts)
+    ForgeTest,   // forge test
+    ForgeBuild,  // forge build
+    Npx,
+    Custom,
+}
+
+impl Default for ScriptRunner {
+    fn default() -> Self {
+        ScriptRunner::Bash
+    }
+}
+
+impl From<&str> for ScriptRunner {
+    fn from(s: &str) -> Self {
+        match s.to_lowercase().as_str() {
+            "node" => ScriptRunner::Node,
+            "bun" => ScriptRunner::Bun,
+            "python" => ScriptRunner::Python,
+            "forge" | "forge-script" => ScriptRunner::Forge,
+            "forge-test" | "forgetest" => ScriptRunner::ForgeTest,
+            "forge-build" | "forgebuild" => ScriptRunner::ForgeBuild,
+            "npx" => ScriptRunner::Npx,
+            "custom" => ScriptRunner::Custom,
+            _ => ScriptRunner::Bash,
+        }
+    }
+}
+
+impl std::fmt::Display for ScriptRunner {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            ScriptRunner::Bash => write!(f, "bash"),
+            ScriptRunner::Node => write!(f, "node"),
+            ScriptRunner::Bun => write!(f, "bun"),
+            ScriptRunner::Python => write!(f, "python"),
+            ScriptRunner::Forge => write!(f, "forge"),
+            ScriptRunner::ForgeTest => write!(f, "forge-test"),
+            ScriptRunner::ForgeBuild => write!(f, "forge-build"),
+            ScriptRunner::Npx => write!(f, "npx"),
+            ScriptRunner::Custom => write!(f, "custom"),
+        }
+    }
+}
+
+/// Script entity (belongs to a workspace)
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Script {
+    pub id: String,
+    pub workspace_id: String,
+    pub name: String,
+    pub description: Option<String>,
+    #[serde(default)]
+    pub runner: ScriptRunner,
+    pub file_path: String,
+    pub command: Option<String>,
+    pub working_directory: Option<String>,
+    pub category: Option<String>,
+    pub created_at: DateTime<Utc>,
+    pub updated_at: DateTime<Utc>,
+    #[serde(default)]
+    pub flags: Vec<ScriptFlag>,
+}
+
+/// Script flag definition
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ScriptFlag {
+    pub id: String,
+    pub script_id: String,
+    pub flag_name: String,
+    pub flag_type: ScriptFlagType,
+    pub default_value: Option<String>,
+    pub required: bool,
+    pub description: Option<String>,
+}
+
+/// Script flag type
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "lowercase")]
+pub enum ScriptFlagType {
+    String,
+    Boolean,
+    Number,
+}
+
+impl Default for ScriptFlagType {
+    fn default() -> Self {
+        ScriptFlagType::String
+    }
+}
+
+impl From<&str> for ScriptFlagType {
+    fn from(s: &str) -> Self {
+        match s.to_lowercase().as_str() {
+            "boolean" | "bool" => ScriptFlagType::Boolean,
+            "number" | "int" | "integer" => ScriptFlagType::Number,
+            _ => ScriptFlagType::String,
+        }
+    }
+}
+
+/// Script run status
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "lowercase")]
+pub enum ScriptRunStatus {
+    Running,
+    Success,
+    Failed,
+    Cancelled,
+}
+
+impl Default for ScriptRunStatus {
+    fn default() -> Self {
+        ScriptRunStatus::Running
+    }
+}
+
+impl From<&str> for ScriptRunStatus {
+    fn from(s: &str) -> Self {
+        match s.to_lowercase().as_str() {
+            "success" => ScriptRunStatus::Success,
+            "failed" => ScriptRunStatus::Failed,
+            "cancelled" => ScriptRunStatus::Cancelled,
+            _ => ScriptRunStatus::Running,
+        }
+    }
+}
+
+/// Script run entity
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ScriptRun {
+    pub id: String,
+    pub script_id: String,
+    pub started_at: DateTime<Utc>,
+    pub finished_at: Option<DateTime<Utc>>,
+    pub status: ScriptRunStatus,
+    pub exit_code: Option<i32>,
+    pub flags_used: Option<serde_json::Value>,
+    pub env_vars_used: Option<serde_json::Value>,
+    pub logs: Option<String>,
+}
+
+/// Environment variable entity (values are encrypted in DB)
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct EnvironmentVariable {
+    pub id: String,
+    pub workspace_id: String,
+    pub key: String,
+    // Note: value is not included in responses for security
+    pub description: Option<String>,
+    pub created_at: DateTime<Utc>,
+}
+
+/// Environment variable with decrypted value (for internal use only)
+#[derive(Debug, Clone)]
+pub struct EnvironmentVariableWithValue {
+    pub id: String,
+    pub workspace_id: String,
+    pub key: String,
+    pub value: String,
+    pub description: Option<String>,
+    pub created_at: DateTime<Utc>,
+}
+
+/// Conversation entity
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Conversation {
+    pub id: String,
+    pub workspace_id: Option<String>,
+    pub title: Option<String>,
+    pub created_at: DateTime<Utc>,
+    pub updated_at: DateTime<Utc>,
+}
+
+/// Message entity (belongs to a conversation)
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Message {
+    pub id: String,
+    pub conversation_id: String,
+    pub role: MessageRole,
+    pub content: String,
+    pub created_at: DateTime<Utc>,
+}
+
+/// Message role
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "lowercase")]
+pub enum MessageRole {
+    User,
+    Assistant,
+    System,
+}
+
+impl From<&str> for MessageRole {
+    fn from(s: &str) -> Self {
+        match s.to_lowercase().as_str() {
+            "assistant" => MessageRole::Assistant,
+            "system" => MessageRole::System,
+            _ => MessageRole::User,
+        }
+    }
+}
+
+/// Preference entity (global key-value store)
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Preference {
+    pub id: String,
+    pub key: String,
+    pub value: serde_json::Value,
+    pub updated_at: DateTime<Utc>,
+}
+
+/// Contract documentation entity (per-function docs)
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ContractDoc {
+    pub id: String,
+    pub contract_id: String,
+    pub function_name: String,
+    pub description: Option<String>,
+    pub notes: Option<String>,
+    pub updated_at: DateTime<Utc>,
+}
+
+// ============================================================================
+// Input types for creating/updating entities
+// ============================================================================
+
+/// Input for creating a script
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CreateScriptInput {
+    pub name: String,
+    pub description: Option<String>,
+    pub runner: Option<String>,
+    pub file_path: String,
+    pub command: Option<String>,
+    pub working_directory: Option<String>,
+    pub category: Option<String>,
+    #[serde(default)]
+    pub flags: Vec<CreateScriptFlagInput>,
+}
+
+/// Input for creating a script flag
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CreateScriptFlagInput {
+    pub flag_name: String,
+    pub flag_type: String,
+    pub default_value: Option<String>,
+    #[serde(default)]
+    pub required: bool,
+    pub description: Option<String>,
+}
+
+/// Input for running a script
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RunScriptInput {
+    #[serde(default)]
+    pub flags: std::collections::HashMap<String, String>,
+    #[serde(default)]
+    pub env_var_keys: Vec<String>,
+}
+
+/// Input for creating an environment variable
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CreateEnvVarInput {
+    pub key: String,
+    pub value: String,
+    pub description: Option<String>,
+}
+
+/// Input for creating a conversation
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CreateConversationInput {
+    pub workspace_id: Option<String>,
+    pub title: Option<String>,
+}
+
+/// Input for creating a message
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CreateMessageInput {
+    pub role: String,
+    pub content: String,
+}
+
+/// Input for creating a network
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CreateNetworkInput {
+    pub blockchain_id: String,
+    pub name: String,
+    pub network_type: String,
+    pub rpc_url: String,
+    pub chain_id_numeric: Option<u64>,
+    pub explorer_url: Option<String>,
+    pub explorer_api_url: Option<String>,
+    pub explorer_api_key: Option<String>,
+    pub faucet_url: Option<String>,
+    pub currency_symbol: String,
+    pub currency_decimals: Option<u8>,
+    #[serde(default)]
+    pub is_default: bool,
+}
+
+/// Input for updating a network
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct UpdateNetworkInput {
+    pub name: Option<String>,
+    pub rpc_url: Option<String>,
+    pub explorer_url: Option<String>,
+    pub explorer_api_url: Option<String>,
+    pub explorer_api_key: Option<String>,
+    pub faucet_url: Option<String>,
+    pub is_default: Option<bool>,
 }

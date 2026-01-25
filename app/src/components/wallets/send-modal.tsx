@@ -1,9 +1,25 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect } from 'react';
+import { useForm } from 'react-hook-form';
+import { zodResolver } from '@hookform/resolvers/zod';
+import { z } from 'zod';
 import { Button, Input, Modal } from '@/components/ui';
 import type { WalletWithBalance, Chain } from '@/types';
 import { sendTransaction } from '@/lib/wallet/transfer';
+
+// Zod schema for send funds form
+const sendFundsSchema = z.object({
+  recipient: z.string().min(1, 'Recipient address is required'),
+  amount: z
+    .string()
+    .min(1, 'Amount is required')
+    .refine((val) => !isNaN(parseFloat(val)) && parseFloat(val) > 0, {
+      message: 'Please enter a valid amount greater than 0',
+    }),
+});
+
+type SendFundsInput = z.infer<typeof sendFundsSchema>;
 
 interface SendModalProps {
   isOpen: boolean;
@@ -20,10 +36,26 @@ export function SendModal({
   onClose,
   onSuccess,
 }: SendModalProps) {
-  const [recipient, setRecipient] = useState('');
-  const [amount, setAmount] = useState('');
-  const [isLoading, setIsLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const {
+    register,
+    handleSubmit,
+    reset,
+    formState: { errors, isSubmitting },
+    setError: setFormError,
+  } = useForm<SendFundsInput>({
+    resolver: zodResolver(sendFundsSchema),
+    defaultValues: {
+      recipient: '',
+      amount: '',
+    },
+  });
+
+  // Reset form when modal opens
+  useEffect(() => {
+    if (isOpen) {
+      reset({ recipient: '', amount: '' });
+    }
+  }, [isOpen, reset]);
 
   const getAddressPlaceholder = () => {
     switch (chain.ecosystem) {
@@ -36,41 +68,24 @@ export function SendModal({
     }
   };
 
-  const handleSubmit = async () => {
-    if (!recipient.trim()) {
-      setError('Recipient address is required');
-      return;
-    }
-
-    if (!amount.trim() || isNaN(parseFloat(amount)) || parseFloat(amount) <= 0) {
-      setError('Please enter a valid amount');
-      return;
-    }
-
-    setIsLoading(true);
-    setError(null);
-
+  const onSubmit = async (data: SendFundsInput) => {
     try {
       const txHash = await sendTransaction({
         walletId: wallet.id,
-        recipient: recipient.trim(),
-        amount: amount.trim(),
+        recipient: data.recipient.trim(),
+        amount: data.amount.trim(),
         chain,
       });
 
       onSuccess(txHash);
       handleClose();
     } catch (err) {
-      setError((err as Error).message);
-    } finally {
-      setIsLoading(false);
+      setFormError('root', { message: (err as Error).message });
     }
   };
 
   const handleClose = () => {
-    setRecipient('');
-    setAmount('');
-    setError(null);
+    reset();
     onClose();
   };
 
@@ -87,10 +102,10 @@ export function SendModal({
       size="md"
       footer={
         <>
-          <Button variant="secondary" onClick={handleClose} disabled={isLoading}>
+          <Button variant="secondary" onClick={handleClose} disabled={isSubmitting}>
             Cancel
           </Button>
-          <Button variant="primary" onClick={handleSubmit} isLoading={isLoading}>
+          <Button variant="primary" onClick={handleSubmit(onSubmit)} isLoading={isSubmitting}>
             Send
           </Button>
         </>
@@ -112,23 +127,23 @@ export function SendModal({
         <Input
           label="Recipient Address"
           placeholder={getAddressPlaceholder()}
-          value={recipient}
-          onChange={(e) => setRecipient(e.target.value)}
+          {...register('recipient')}
+          error={errors.recipient?.message}
         />
 
         <Input
           label={`Amount (${chain.nativeCurrency})`}
           placeholder="0.0"
-          value={amount}
-          onChange={(e) => setAmount(e.target.value)}
+          {...register('amount')}
           type="text"
+          error={errors.amount?.message}
         />
 
         <p className="text-xs text-coco-text-tertiary">
           Network: {chain.name}
         </p>
 
-        {error && <p className="text-sm text-coco-error">{error}</p>}
+        {errors.root && <p className="text-sm text-coco-error">{errors.root.message}</p>}
       </div>
     </Modal>
   );

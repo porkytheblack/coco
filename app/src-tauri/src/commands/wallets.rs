@@ -3,7 +3,7 @@ use tauri::State;
 use crate::types::{Ecosystem, Wallet, WalletType, WalletWithChain};
 use crate::AppState;
 
-#[tauri::command]
+#[tauri::command(rename_all = "camelCase")]
 pub async fn list_wallets(
     chain_id: String,
     state: State<'_, AppState>,
@@ -29,7 +29,7 @@ pub async fn list_reusable_wallets(
         .map_err(|e| e.to_string())
 }
 
-#[tauri::command]
+#[tauri::command(rename_all = "camelCase")]
 pub async fn get_wallet(
     chain_id: String,
     wallet_id: String,
@@ -42,7 +42,7 @@ pub async fn get_wallet(
         .map_err(|e| e.to_string())
 }
 
-#[tauri::command]
+#[tauri::command(rename_all = "camelCase")]
 pub async fn create_wallet(
     chain_id: String,
     name: String,
@@ -59,7 +59,7 @@ pub async fn create_wallet(
         .map_err(|e| e.to_string())
 }
 
-#[tauri::command]
+#[tauri::command(rename_all = "camelCase")]
 pub async fn import_wallet(
     chain_id: String,
     name: String,
@@ -83,7 +83,7 @@ pub async fn import_wallet(
         .map_err(|e| e.to_string())
 }
 
-#[tauri::command]
+#[tauri::command(rename_all = "camelCase")]
 pub async fn get_wallet_private_key(
     wallet_id: String,
     state: State<'_, AppState>,
@@ -95,7 +95,7 @@ pub async fn get_wallet_private_key(
         .map_err(|e| e.to_string())
 }
 
-#[tauri::command]
+#[tauri::command(rename_all = "camelCase")]
 pub async fn delete_wallet(
     chain_id: String,
     wallet_id: String,
@@ -108,7 +108,7 @@ pub async fn delete_wallet(
         .map_err(|e| e.to_string())
 }
 
-#[tauri::command]
+#[tauri::command(rename_all = "camelCase")]
 pub async fn refresh_balance(
     chain_id: String,
     wallet_id: String,

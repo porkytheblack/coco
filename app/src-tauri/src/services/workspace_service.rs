@@ -1,6 +1,6 @@
 use crate::db::DbPool;
 use crate::error::{CocoError, Result};
-use crate::types::{Contract, ContractWithChain, DecodedEvent, InterfaceType, Transaction, TransactionRun, TransactionStatus, TxStatus, Workspace};
+use crate::types::{AIExplanation, Contract, ContractWithChain, DecodedEvent, InterfaceType, Transaction, TransactionRun, TransactionStatus, TxStatus, Workspace};
 use chrono::{DateTime, Utc};
 use std::path::PathBuf;
 use uuid::Uuid;
@@ -549,6 +549,7 @@ impl WorkspaceService {
             started_at,
             finished_at: Some(finished_at),
             duration_ms: Some(duration_ms),
+            ai_explanation: None,
         };
 
         Ok(run)
@@ -565,6 +566,12 @@ impl WorkspaceService {
         // Serialize args/payload to JSON
         let args_json = run.payload.as_ref().map(|p| serde_json::to_string(p).unwrap_or_default());
 
+        // Serialize result to JSON
+        let result_json = run.result.as_ref().map(|r| serde_json::to_string(r).unwrap_or_default());
+
+        // Serialize AI explanation to JSON
+        let ai_explanation_json = run.ai_explanation.as_ref().map(|e| serde_json::to_string(e).unwrap_or_default());
+
         let status_str = match run.status {
             TxStatus::Pending => "pending",
             TxStatus::Success => "success",
@@ -573,8 +580,12 @@ impl WorkspaceService {
 
         sqlx::query(
             r#"
-            INSERT INTO transaction_runs (id, transaction_id, status, tx_hash, block_number, gas_used, error, args, events, executed_at)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            INSERT INTO transaction_runs (
+                id, transaction_id, status, tx_hash, block_number, gas_used,
+                error, args, events, executed_at,
+                result, fee, finished_at, duration_ms, ai_explanation
+            )
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             "#,
         )
         .bind(&run.id)
@@ -587,6 +598,11 @@ impl WorkspaceService {
         .bind(&args_json)
         .bind(&events_json)
         .bind(run.started_at.to_rfc3339())
+        .bind(&result_json)
+        .bind(&run.fee)
+        .bind(run.finished_at.map(|t| t.to_rfc3339()))
+        .bind(run.duration_ms.map(|d| d as i64))
+        .bind(&ai_explanation_json)
         .execute(&self.db)
         .await
         .map_err(|e| CocoError::Database(e.to_string()))?;
@@ -596,7 +612,14 @@ impl WorkspaceService {
 
     pub async fn list_transaction_runs(&self, transaction_id: &str) -> Result<Vec<TransactionRun>> {
         let rows = sqlx::query_as::<_, TransactionRunRow>(
-            "SELECT id, transaction_id, status, tx_hash, block_number, gas_used, error, args, events, executed_at FROM transaction_runs WHERE transaction_id = ? ORDER BY executed_at DESC"
+            r#"
+            SELECT id, transaction_id, status, tx_hash, block_number, gas_used,
+                   error, args, events, executed_at,
+                   result, fee, finished_at, duration_ms, ai_explanation
+            FROM transaction_runs
+            WHERE transaction_id = ?
+            ORDER BY executed_at DESC
+            "#
         )
         .bind(transaction_id)
         .fetch_all(&self.db)
@@ -604,6 +627,28 @@ impl WorkspaceService {
         .map_err(|e| CocoError::Database(e.to_string()))?;
 
         Ok(rows.into_iter().map(TransactionRun::from).collect())
+    }
+
+    pub async fn update_transaction_run_ai_explanation(
+        &self,
+        run_id: &str,
+        ai_explanation: &AIExplanation,
+    ) -> Result<()> {
+        let json = serde_json::to_string(ai_explanation)
+            .map_err(|e| CocoError::Serialization(e.to_string()))?;
+
+        let result = sqlx::query("UPDATE transaction_runs SET ai_explanation = ? WHERE id = ?")
+            .bind(&json)
+            .bind(run_id)
+            .execute(&self.db)
+            .await
+            .map_err(|e| CocoError::Database(e.to_string()))?;
+
+        if result.rows_affected() == 0 {
+            return Err(CocoError::NotFound(format!("Transaction run not found: {}", run_id)));
+        }
+
+        Ok(())
     }
 
     // Helper methods
@@ -818,6 +863,17 @@ struct TransactionRunRow {
     args: Option<String>,
     events: Option<String>,
     executed_at: String,
+    // New fields for result/output tracking
+    #[sqlx(default)]
+    result: Option<String>,
+    #[sqlx(default)]
+    fee: Option<String>,
+    #[sqlx(default)]
+    finished_at: Option<String>,
+    #[sqlx(default)]
+    duration_ms: Option<i64>,
+    #[sqlx(default)]
+    ai_explanation: Option<String>,
 }
 
 impl From<TransactionRunRow> for TransactionRun {
@@ -837,26 +893,40 @@ impl From<TransactionRunRow> for TransactionRun {
             .args
             .and_then(|s| serde_json::from_str(&s).ok());
 
+        let result: Option<serde_json::Value> = row
+            .result
+            .and_then(|s| serde_json::from_str(&s).ok());
+
+        let ai_explanation: Option<AIExplanation> = row
+            .ai_explanation
+            .and_then(|s| serde_json::from_str(&s).ok());
+
         let started_at = row
             .executed_at
             .parse::<DateTime<Utc>>()
             .unwrap_or_else(|_| Utc::now());
 
+        let finished_at = row
+            .finished_at
+            .and_then(|s| s.parse::<DateTime<Utc>>().ok())
+            .or(Some(started_at));
+
         TransactionRun {
             id: row.id,
             transaction_id: row.transaction_id,
             payload,
-            result: None,
+            result,
             tx_hash: row.tx_hash,
             block_number: row.block_number.map(|n| n as u64),
             gas_used: row.gas_used.and_then(|s| s.parse().ok()),
-            fee: None,
+            fee: row.fee,
             status,
             error_message: row.error,
             events,
             started_at,
-            finished_at: Some(started_at), // Use executed_at as finished time
-            duration_ms: None,
+            finished_at,
+            duration_ms: row.duration_ms.map(|n| n as u64),
+            ai_explanation,
         }
     }
 }

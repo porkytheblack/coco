@@ -298,7 +298,7 @@ impl RunService {
         let run_logs_final = self.run_logs.clone();
         let processes = self.active_processes.clone();
         let run_id_clone = run_id.clone();
-        let workspace_id = workspace_id.to_string();
+        let _workspace_id = workspace_id.to_string();
 
         tokio::spawn(async move {
             let exit_status = {

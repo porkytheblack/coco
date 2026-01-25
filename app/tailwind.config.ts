@@ -11,21 +11,30 @@ const config: Config = {
     extend: {
       colors: {
         coco: {
-          // Light Mode
+          // Backgrounds
           'bg-primary': 'var(--coco-bg-primary)',
           'bg-secondary': 'var(--coco-bg-secondary)',
           'bg-tertiary': 'var(--coco-bg-tertiary)',
           'bg-elevated': 'var(--coco-bg-elevated)',
+          'bg-inset': 'var(--coco-bg-inset)',
+          // Borders
           'border-subtle': 'var(--coco-border-subtle)',
           'border-default': 'var(--coco-border-default)',
           'border-strong': 'var(--coco-border-strong)',
+          // Text
           'text-primary': 'var(--coco-text-primary)',
           'text-secondary': 'var(--coco-text-secondary)',
           'text-tertiary': 'var(--coco-text-tertiary)',
           'text-inverse': 'var(--coco-text-inverse)',
+          // Primary accent (green)
           accent: 'var(--coco-accent)',
           'accent-hover': 'var(--coco-accent-hover)',
           'accent-subtle': 'var(--coco-accent-subtle)',
+          // Secondary accent (blue/cyan)
+          secondary: 'var(--coco-secondary)',
+          'secondary-hover': 'var(--coco-secondary-hover)',
+          'secondary-subtle': 'var(--coco-secondary-subtle)',
+          // Status colors
           success: 'var(--coco-success)',
           'success-subtle': 'var(--coco-success-subtle)',
           error: 'var(--coco-error)',
@@ -47,6 +56,8 @@ const config: Config = {
         lg: '1.125rem',
         xl: '1.25rem',
         '2xl': '1.5rem',
+        '3xl': '1.875rem',
+        '4xl': '2.25rem',
       },
       spacing: {
         '1': '0.25rem',
@@ -65,13 +76,15 @@ const config: Config = {
         md: '6px',
         lg: '8px',
         xl: '12px',
+        '2xl': '16px',
         full: '9999px',
       },
       boxShadow: {
-        sm: '0 1px 2px rgba(0, 0, 0, 0.05)',
-        md: '0 4px 6px -1px rgba(0, 0, 0, 0.1)',
-        lg: '0 10px 15px -3px rgba(0, 0, 0, 0.1)',
-        drawer: '-4px 0 24px rgba(0, 0, 0, 0.12)',
+        sm: 'var(--coco-shadow-sm)',
+        md: 'var(--coco-shadow-md)',
+        lg: 'var(--coco-shadow-lg)',
+        drawer: 'var(--coco-shadow-drawer)',
+        glow: 'var(--coco-shadow-glow)',
       },
       transitionDuration: {
         fast: '100ms',
@@ -80,15 +93,21 @@ const config: Config = {
       },
       animation: {
         'slide-in': 'slideIn 300ms ease-out',
+        'slide-up': 'slideUp 300ms ease-out',
         'fade-in': 'fadeIn 200ms ease-out',
         'scale-in': 'scaleIn 200ms ease-out',
         spin: 'spin 1s linear infinite',
         pulse: 'pulse 1.5s ease-in-out infinite',
+        shimmer: 'shimmer 2s infinite',
       },
       keyframes: {
         slideIn: {
           '0%': { transform: 'translateX(100%)' },
           '100%': { transform: 'translateX(0)' },
+        },
+        slideUp: {
+          '0%': { opacity: '0', transform: 'translateY(10px)' },
+          '100%': { opacity: '1', transform: 'translateY(0)' },
         },
         fadeIn: {
           '0%': { opacity: '0' },
@@ -98,6 +117,14 @@ const config: Config = {
           '0%': { opacity: '0', transform: 'scale(0.95)' },
           '100%': { opacity: '1', transform: 'scale(1)' },
         },
+        shimmer: {
+          '0%': { transform: 'translateX(-100%)' },
+          '100%': { transform: 'translateX(100%)' },
+        },
+      },
+      backgroundImage: {
+        'gradient-accent': 'var(--coco-gradient-accent)',
+        'gradient-bg': 'var(--coco-gradient-bg)',
       },
     },
   },

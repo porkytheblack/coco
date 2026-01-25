@@ -2,6 +2,10 @@ export type Ecosystem = 'evm' | 'solana' | 'aptos';
 export type TxStatus = 'pending' | 'success' | 'failed';
 export type NetworkType = 'mainnet' | 'testnet' | 'devnet' | 'custom';
 export type InterfaceType = 'abi' | 'idl' | 'move';
+export type ScriptRunStatus = 'pending' | 'running' | 'success' | 'failed' | 'cancelled';
+export type ScriptFlagType = 'string' | 'number' | 'boolean' | 'file';
+export type ScriptRunner = 'bash' | 'node' | 'bun' | 'python' | 'forge' | 'forge-test' | 'forge-build' | 'npx' | 'custom';
+export type MessageRole = 'user' | 'assistant' | 'system';
 
 // Move Definition Types (for Aptos - no ABI/IDL available)
 export type MoveVisibility = 'public' | 'entry' | 'private';
@@ -198,6 +202,12 @@ export interface Transaction {
   lastRun?: TransactionRun;
 }
 
+export interface AIExplanation {
+  summary: string;
+  details: string;
+  suggestions: string[];
+}
+
 export interface TransactionRun {
   id: string;
   transactionId: string;
@@ -213,6 +223,7 @@ export interface TransactionRun {
   startedAt: string;
   finishedAt?: string;
   durationMs?: number;
+  aiExplanation?: AIExplanation;
 }
 
 export interface DecodedEvent {
@@ -331,4 +342,193 @@ export interface AISettings {
   enabled: boolean;
   provider: AIProvider;
   providers: Record<AIProvider, AIProviderConfig>;
+}
+
+// ============================================================================
+// New v0.0.3 Types
+// ============================================================================
+
+// Blockchain - represents an ecosystem like Ethereum, Solana, Aptos
+export interface Blockchain {
+  id: string;
+  name: string;
+  ecosystem: Ecosystem;
+  iconId?: string;
+  createdAt: string;
+}
+
+// Network - represents a specific network within a blockchain
+export interface Network {
+  id: string;
+  blockchainId: string;
+  name: string;
+  networkType: NetworkType;
+  rpcUrl: string;
+  chainIdNumeric?: number;
+  nativeCurrency: string;
+  blockExplorerUrl?: string;
+  blockExplorerApiUrl?: string;
+  blockExplorerApiKey?: string;
+  faucetUrl?: string;
+  isCustom: boolean;
+  createdAt: string;
+}
+
+export interface NetworkWithBlockchain extends Network {
+  blockchain?: Blockchain;
+}
+
+// Script - represents a script that can be executed
+export interface Script {
+  id: string;
+  workspaceId: string;
+  name: string;
+  description?: string;
+  runner: ScriptRunner;
+  filePath: string;
+  command?: string; // For custom runner or additional args
+  workingDirectory?: string; // Where to run the script from
+  category?: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+// ScriptFlag - represents a flag/argument for a script
+export interface ScriptFlag {
+  id: string;
+  scriptId: string;
+  flagName: string;
+  flagType: ScriptFlagType;
+  defaultValue?: string;
+  required: boolean;
+  description?: string;
+  createdAt: string;
+}
+
+// ScriptRun - represents an execution of a script
+export interface ScriptRun {
+  id: string;
+  scriptId: string;
+  status: ScriptRunStatus;
+  exitCode?: number;
+  flags?: Record<string, string>;
+  startedAt: string;
+  finishedAt?: string;
+  durationMs?: number;
+}
+
+// EnvironmentVariable - encrypted environment variable
+export interface EnvironmentVariable {
+  id: string;
+  workspaceId: string;
+  key: string;
+  description?: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+// Conversation - chat conversation for AI assistant
+export interface Conversation {
+  id: string;
+  workspaceId?: string;
+  title?: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+// Message - individual message in a conversation
+export interface Message {
+  id: string;
+  conversationId: string;
+  role: MessageRole;
+  content: string;
+  createdAt: string;
+}
+
+// Preference - key-value user preference
+export interface Preference {
+  key: string;
+  value: unknown;
+  createdAt: string;
+  updatedAt: string;
+}
+
+// ContractDoc - documentation for contract functions
+export interface ContractDoc {
+  id: string;
+  contractId: string;
+  functionName: string;
+  description?: string;
+  notes?: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+// ============================================================================
+// New v0.0.3 Request Types
+// ============================================================================
+
+export interface CreateNetworkRequest {
+  blockchainId: string;
+  name: string;
+  networkType: NetworkType;
+  rpcUrl: string;
+  chainIdNumeric?: number;
+  nativeCurrency: string;
+  blockExplorerUrl?: string;
+  blockExplorerApiUrl?: string;
+  blockExplorerApiKey?: string;
+  faucetUrl?: string;
+  isCustom?: boolean;
+}
+
+export interface CreateScriptRequest {
+  workspaceId: string;
+  name: string;
+  description?: string;
+  runner: ScriptRunner;
+  filePath: string;
+  command?: string;
+  workingDirectory?: string;
+  category?: string;
+}
+
+export interface CreateScriptFlagRequest {
+  scriptId: string;
+  flagName: string;
+  flagType: ScriptFlagType;
+  defaultValue?: string;
+  required: boolean;
+  description?: string;
+}
+
+export interface RunScriptRequest {
+  scriptId: string;
+  flags?: Record<string, string>;
+  envVarKeys?: string[];
+}
+
+export interface CreateEnvVarRequest {
+  workspaceId: string;
+  key: string;
+  value: string;
+  description?: string;
+}
+
+export interface CreateConversationRequest {
+  workspaceId?: string;
+  title?: string;
+}
+
+export interface AddMessageRequest {
+  conversationId: string;
+  role: MessageRole;
+  content: string;
+}
+
+export interface UpsertContractDocRequest {
+  contractId: string;
+  functionName: string;
+  description?: string;
+  notes?: string;
 }
