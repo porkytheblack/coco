@@ -1,13 +1,16 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Button, Input, Modal } from '@/components/ui';
 import type { Ecosystem, CreateChainRequest } from '@/types';
+import type { BlockchainDefinition } from '@/data/chain-registry';
 
 interface AddChainModalProps {
   isOpen: boolean;
   onClose: () => void;
   onAdd: (request: CreateChainRequest) => Promise<void>;
+  /** Optional blockchain context for adding a custom network to an existing blockchain */
+  blockchain?: BlockchainDefinition | null;
 }
 
 const ecosystemOptions: { value: Ecosystem; label: string; currency: string }[] = [
@@ -16,7 +19,7 @@ const ecosystemOptions: { value: Ecosystem; label: string; currency: string }[] 
   { value: 'aptos', label: 'Aptos', currency: 'APT' },
 ];
 
-export function AddChainModal({ isOpen, onClose, onAdd }: AddChainModalProps) {
+export function AddChainModal({ isOpen, onClose, onAdd, blockchain }: AddChainModalProps) {
   const [name, setName] = useState('');
   const [ecosystem, setEcosystem] = useState<Ecosystem>('evm');
   const [rpcUrl, setRpcUrl] = useState('');
@@ -24,6 +27,16 @@ export function AddChainModal({ isOpen, onClose, onAdd }: AddChainModalProps) {
   const [blockExplorerUrl, setBlockExplorerUrl] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  // When blockchain context is provided, pre-populate and lock the ecosystem
+  const isBlockchainContext = !!blockchain;
+
+  useEffect(() => {
+    if (blockchain) {
+      setEcosystem(blockchain.ecosystem);
+      setName(`${blockchain.name} Custom`);
+    }
+  }, [blockchain, isOpen]);
 
   const selectedEcosystem = ecosystemOptions.find((e) => e.value === ecosystem);
   const showChainId = ecosystem === 'evm';
@@ -54,12 +67,12 @@ export function AddChainModal({ isOpen, onClose, onAdd }: AddChainModalProps) {
         ecosystem,
         rpcUrl: rpcUrl.trim(),
         chainIdNumeric,
-        currencySymbol: selectedEcosystem?.currency || 'ETH',
+        currencySymbol: blockchain?.nativeCurrency || selectedEcosystem?.currency || 'ETH',
         blockExplorerUrl: blockExplorerUrl.trim() || undefined,
-        blockchain: 'custom',
+        blockchain: blockchain?.id || 'custom',
         networkType: 'custom',
         isCustom: true,
-        iconId: 'custom',
+        iconId: blockchain?.iconId || 'custom',
       });
       handleClose();
     } catch (err) {
@@ -79,11 +92,15 @@ export function AddChainModal({ isOpen, onClose, onAdd }: AddChainModalProps) {
     onClose();
   };
 
+  const modalTitle = blockchain
+    ? `Add Custom Network to ${blockchain.name}`
+    : 'Add Chain';
+
   return (
     <Modal
       isOpen={isOpen}
       onClose={handleClose}
-      title="Add Chain"
+      title={modalTitle}
       size="md"
       footer={
         <>
@@ -108,17 +125,23 @@ export function AddChainModal({ isOpen, onClose, onAdd }: AddChainModalProps) {
           <label className="block text-sm font-medium text-coco-text-primary mb-1.5">
             Ecosystem
           </label>
-          <select
-            value={ecosystem}
-            onChange={(e) => setEcosystem(e.target.value as Ecosystem)}
-            className="w-full px-3 py-2 text-sm bg-coco-bg-primary border border-coco-border-default rounded-md focus:outline-none focus:ring-2 focus:ring-coco-accent focus:border-transparent"
-          >
-            {ecosystemOptions.map((option) => (
-              <option key={option.value} value={option.value}>
-                {option.label}
-              </option>
-            ))}
-          </select>
+          {isBlockchainContext ? (
+            <div className="px-3 py-2 text-sm bg-coco-bg-secondary border border-coco-border-default rounded-md text-coco-text-secondary">
+              {selectedEcosystem?.label || ecosystem.toUpperCase()}
+            </div>
+          ) : (
+            <select
+              value={ecosystem}
+              onChange={(e) => setEcosystem(e.target.value as Ecosystem)}
+              className="w-full px-3 py-2 text-sm bg-coco-bg-primary border border-coco-border-default rounded-md focus:outline-none focus:ring-2 focus:ring-coco-accent focus:border-transparent"
+            >
+              {ecosystemOptions.map((option) => (
+                <option key={option.value} value={option.value}>
+                  {option.label}
+                </option>
+              ))}
+            </select>
+          )}
         </div>
 
         <Input

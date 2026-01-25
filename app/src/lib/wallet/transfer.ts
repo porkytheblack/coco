@@ -3,7 +3,7 @@
  */
 import { ethers } from 'ethers';
 import { Connection, PublicKey, SystemProgram, Transaction, Keypair, LAMPORTS_PER_SOL, sendAndConfirmTransaction } from '@solana/web3.js';
-import { Aptos, AptosConfig, Network, Account, Ed25519PrivateKey, AccountAddress } from '@aptos-labs/ts-sdk';
+import { Aptos, AptosConfig, Account, Ed25519PrivateKey, AccountAddress } from '@aptos-labs/ts-sdk';
 import bs58 from 'bs58';
 import type { Chain } from '@/types';
 import { getWalletPrivateKey } from '@/lib/tauri/commands';
@@ -46,7 +46,16 @@ async function sendEvmTransaction(
   amount: string,
   chain: Chain
 ): Promise<string> {
+  // Validate and normalize the recipient address to prevent ENS resolution
+  if (!recipient || !ethers.isAddress(recipient)) {
+    throw new Error(`Invalid recipient address: ${recipient}`);
+  }
+  const normalizedRecipient = ethers.getAddress(recipient);
+
   const provider = new ethers.JsonRpcProvider(chain.rpcUrl);
+  // Wait for network detection to ensure chain ID is set (required for EIP-155)
+  await provider.getNetwork();
+
   const pk = privateKey.startsWith('0x') ? privateKey : `0x${privateKey}`;
   const wallet = new ethers.Wallet(pk, provider);
 
@@ -54,7 +63,7 @@ async function sendEvmTransaction(
   const amountWei = ethers.parseEther(amount);
 
   const tx = await wallet.sendTransaction({
-    to: recipient,
+    to: normalizedRecipient,
     value: amountWei,
   });
 

@@ -31,6 +31,7 @@
     "react-dom": "^19.0.0",
     "react-markdown": "^10.1.0",
     "remark-gfm": "^4.0.1",
+    "@tanstack/react-query": "^5.62.0",
     "tailwind-merge": "^2.2.0",
     "zustand": "^5.0.0"
   },

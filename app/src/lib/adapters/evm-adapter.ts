@@ -40,13 +40,22 @@ export const evmAdapter: ChainAdapter = {
     contractInterface
   ): Promise<CallResult> {
     try {
+      // Validate and normalize the contract address to prevent ENS resolution attempts
+      if (!contractAddress || !ethers.isAddress(contractAddress)) {
+        return { success: false, error: `Invalid contract address: ${contractAddress}` };
+      }
+      const normalizedAddress = ethers.getAddress(contractAddress);
+
+      // Validate and normalize any address arguments to prevent ENS resolution
+      const normalizedArgs = normalizeAddressArgs(args, contractInterface as ethers.InterfaceAbi, functionName);
+
       const provider = new ethers.JsonRpcProvider(rpcUrl);
       const contract = new ethers.Contract(
-        contractAddress,
+        normalizedAddress,
         contractInterface as ethers.InterfaceAbi,
         provider
       );
-      const result = await contract[functionName](...args);
+      const result = await contract[functionName](...normalizedArgs);
 
       // Handle BigInt serialization
       const serializedResult = serializeResult(result);
@@ -66,13 +75,27 @@ export const evmAdapter: ChainAdapter = {
     options
   ): Promise<CallResult> {
     try {
+      // Validate and normalize the contract address to prevent ENS resolution attempts
+      if (!contractAddress || !ethers.isAddress(contractAddress)) {
+        return { success: false, error: `Invalid contract address: ${contractAddress}` };
+      }
+      const normalizedAddress = ethers.getAddress(contractAddress);
+
+      // Create provider and wait for network to be detected (ensures chain ID is set)
       const provider = new ethers.JsonRpcProvider(rpcUrl);
+      // Get the network to ensure the provider has the correct chain ID
+      // This is required for EIP-155 transaction signing
+      await provider.getNetwork();
+
       const wallet = new ethers.Wallet(privateKey, provider);
       const contract = new ethers.Contract(
-        contractAddress,
+        normalizedAddress,
         contractInterface as ethers.InterfaceAbi,
         wallet
       );
+
+      // Validate and normalize any address arguments to prevent ENS resolution
+      const normalizedArgs = normalizeAddressArgs(args, contractInterface as ethers.InterfaceAbi, functionName);
 
       const txOptions: Record<string, unknown> = {};
       if (options?.value) {
@@ -82,7 +105,7 @@ export const evmAdapter: ChainAdapter = {
         txOptions.gasLimit = BigInt(options.gasLimit);
       }
 
-      const tx = await contract[functionName](...args, txOptions);
+      const tx = await contract[functionName](...normalizedArgs, txOptions);
       const receipt = await tx.wait();
 
       const events = receipt.logs
@@ -380,6 +403,52 @@ function detectBlockExplorerApi(rpcUrl: string): string | null {
   }
 
   return null;
+}
+
+// Helper to validate and normalize address arguments
+// This prevents ENS resolution attempts on networks that don't support it
+function normalizeAddressArgs(args: unknown[], contractInterface: ethers.InterfaceAbi, functionName: string): unknown[] {
+  try {
+    const iface = new ethers.Interface(contractInterface);
+    const fragment = iface.getFunction(functionName);
+    if (!fragment) return args;
+
+    return args.map((arg, index) => {
+      const input = fragment.inputs[index];
+      if (!input) return arg;
+
+      // Check if the input type is an address
+      if (input.type === 'address' && typeof arg === 'string') {
+        // Validate and normalize the address
+        if (!ethers.isAddress(arg)) {
+          throw new Error(`Invalid address for parameter '${input.name || index}': ${arg}`);
+        }
+        return ethers.getAddress(arg);
+      }
+
+      // Handle address arrays
+      if (input.type === 'address[]' && Array.isArray(arg)) {
+        return arg.map((addr, i) => {
+          if (typeof addr === 'string') {
+            if (!ethers.isAddress(addr)) {
+              throw new Error(`Invalid address at index ${i} for parameter '${input.name || index}': ${addr}`);
+            }
+            return ethers.getAddress(addr);
+          }
+          return addr;
+        });
+      }
+
+      return arg;
+    });
+  } catch (error) {
+    // If we can't parse the interface, return args as-is
+    // The actual call will fail with a more specific error
+    if ((error as Error).message?.includes('Invalid address')) {
+      throw error;
+    }
+    return args;
+  }
 }
 
 // Helper to serialize BigInt values

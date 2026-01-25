@@ -265,14 +265,342 @@ async fn run_migrations(pool: &DbPool) -> Result<(), sqlx::Error> {
             .ok();
     }
 
+    // Migration: Add network_id to workspaces
+    let columns: Vec<(String,)> = sqlx::query_as(
+        "SELECT name FROM pragma_table_info('workspaces') WHERE name = 'network_id'"
+    )
+    .fetch_all(pool)
+    .await?;
+
+    if columns.is_empty() {
+        sqlx::query("ALTER TABLE workspaces ADD COLUMN network_id TEXT")
+            .execute(pool)
+            .await
+            .ok();
+    }
+
+    // Migration: Add network_id to contracts
+    let columns: Vec<(String,)> = sqlx::query_as(
+        "SELECT name FROM pragma_table_info('contracts') WHERE name = 'network_id'"
+    )
+    .fetch_all(pool)
+    .await?;
+
+    if columns.is_empty() {
+        sqlx::query("ALTER TABLE contracts ADD COLUMN network_id TEXT")
+            .execute(pool)
+            .await
+            .ok();
+    }
+
+    // Migration: Add network_id and wallet_id to transactions
+    let columns: Vec<(String,)> = sqlx::query_as(
+        "SELECT name FROM pragma_table_info('transactions') WHERE name = 'network_id'"
+    )
+    .fetch_all(pool)
+    .await?;
+
+    if columns.is_empty() {
+        sqlx::query("ALTER TABLE transactions ADD COLUMN network_id TEXT")
+            .execute(pool)
+            .await
+            .ok();
+    }
+
+    let columns: Vec<(String,)> = sqlx::query_as(
+        "SELECT name FROM pragma_table_info('transactions') WHERE name = 'wallet_id'"
+    )
+    .fetch_all(pool)
+    .await?;
+
+    if columns.is_empty() {
+        sqlx::query("ALTER TABLE transactions ADD COLUMN wallet_id TEXT")
+            .execute(pool)
+            .await
+            .ok();
+    }
+
+    // Migration: Add description to workspaces
+    let columns: Vec<(String,)> = sqlx::query_as(
+        "SELECT name FROM pragma_table_info('workspaces') WHERE name = 'description'"
+    )
+    .fetch_all(pool)
+    .await?;
+
+    if columns.is_empty() {
+        sqlx::query("ALTER TABLE workspaces ADD COLUMN description TEXT")
+            .execute(pool)
+            .await
+            .ok();
+    }
+
+    // Run the chains -> blockchains + networks migration
+    migrate_chains_to_blockchains(pool).await?;
+
+    // Migration: Add runner column to scripts table
+    let columns: Vec<(String,)> = sqlx::query_as(
+        "SELECT name FROM pragma_table_info('scripts') WHERE name = 'runner'"
+    )
+    .fetch_all(pool)
+    .await?;
+
+    if columns.is_empty() {
+        sqlx::query("ALTER TABLE scripts ADD COLUMN runner TEXT NOT NULL DEFAULT 'bash'")
+            .execute(pool)
+            .await
+            .ok();
+    }
+
+    // Migration: Add command column to scripts table
+    let columns: Vec<(String,)> = sqlx::query_as(
+        "SELECT name FROM pragma_table_info('scripts') WHERE name = 'command'"
+    )
+    .fetch_all(pool)
+    .await?;
+
+    if columns.is_empty() {
+        sqlx::query("ALTER TABLE scripts ADD COLUMN command TEXT")
+            .execute(pool)
+            .await
+            .ok();
+    }
+
+    // Migration: Add working_directory column to scripts table
+    let columns: Vec<(String,)> = sqlx::query_as(
+        "SELECT name FROM pragma_table_info('scripts') WHERE name = 'working_directory'"
+    )
+    .fetch_all(pool)
+    .await?;
+
+    if columns.is_empty() {
+        sqlx::query("ALTER TABLE scripts ADD COLUMN working_directory TEXT")
+            .execute(pool)
+            .await
+            .ok();
+    }
+
+    // Migration: Add updated_at column to scripts table
+    let columns: Vec<(String,)> = sqlx::query_as(
+        "SELECT name FROM pragma_table_info('scripts') WHERE name = 'updated_at'"
+    )
+    .fetch_all(pool)
+    .await?;
+
+    if columns.is_empty() {
+        sqlx::query("ALTER TABLE scripts ADD COLUMN updated_at TEXT NOT NULL DEFAULT (datetime('now'))")
+            .execute(pool)
+            .await
+            .ok();
+
+        // Update existing rows to have created_at as updated_at
+        sqlx::query("UPDATE scripts SET updated_at = created_at WHERE updated_at IS NULL OR updated_at = ''")
+            .execute(pool)
+            .await
+            .ok();
+    }
+
+    Ok(())
+}
+
+/// Migrate old chains table to new blockchains + networks structure
+async fn migrate_chains_to_blockchains(pool: &DbPool) -> Result<(), sqlx::Error> {
+    // Check if migration is already done (blockchains table has data)
+    let count: (i64,) = sqlx::query_as("SELECT COUNT(*) FROM blockchains")
+        .fetch_one(pool)
+        .await?;
+
+    if count.0 > 0 {
+        return Ok(());
+    }
+
+    // Check if there's any data in chains to migrate
+    let chains_count: (i64,) = sqlx::query_as("SELECT COUNT(*) FROM chains")
+        .fetch_one(pool)
+        .await?;
+
+    if chains_count.0 == 0 {
+        // No chains to migrate, seed fresh data
+        seed_blockchains_and_networks(pool).await?;
+        return Ok(());
+    }
+
+    // Create blockchain entries from unique blockchain values in chains
+    sqlx::query(
+        r#"
+        INSERT OR IGNORE INTO blockchains (id, name, ecosystem, icon_id)
+        SELECT DISTINCT
+            blockchain as id,
+            CASE blockchain
+                WHEN 'ethereum' THEN 'Ethereum'
+                WHEN 'base' THEN 'Base'
+                WHEN 'polygon' THEN 'Polygon'
+                WHEN 'arbitrum' THEN 'Arbitrum'
+                WHEN 'optimism' THEN 'Optimism'
+                WHEN 'avalanche' THEN 'Avalanche'
+                WHEN 'bnb' THEN 'BNB Chain'
+                WHEN 'solana' THEN 'Solana'
+                WHEN 'aptos' THEN 'Aptos'
+                ELSE blockchain
+            END as name,
+            ecosystem,
+            blockchain as icon_id
+        FROM chains
+        WHERE blockchain IS NOT NULL
+        "#,
+    )
+    .execute(pool)
+    .await?;
+
+    // Migrate chains data to networks table
+    sqlx::query(
+        r#"
+        INSERT OR IGNORE INTO networks (
+            id, blockchain_id, name, network_type, rpc_url,
+            chain_id_numeric, explorer_url, explorer_api_url,
+            explorer_api_key, faucet_url, currency_symbol,
+            currency_decimals, is_default
+        )
+        SELECT
+            id,
+            blockchain as blockchain_id,
+            name,
+            network_type,
+            rpc_url,
+            chain_id_numeric,
+            explorer_url,
+            explorer_api_url,
+            explorer_api_key,
+            faucet_url,
+            currency_symbol,
+            currency_decimals,
+            CASE WHEN network_type = 'mainnet' THEN 1 ELSE 0 END as is_default
+        FROM chains
+        WHERE blockchain IS NOT NULL
+        "#,
+    )
+    .execute(pool)
+    .await?;
+
+    // Update workspace network_id based on chain_id
+    sqlx::query(
+        r#"
+        UPDATE workspaces
+        SET network_id = chain_id
+        WHERE network_id IS NULL AND chain_id IN (SELECT id FROM networks)
+        "#,
+    )
+    .execute(pool)
+    .await?;
+
+    // Update contract network_id based on workspace's network
+    sqlx::query(
+        r#"
+        UPDATE contracts
+        SET network_id = (SELECT network_id FROM workspaces WHERE workspaces.id = contracts.workspace_id)
+        WHERE network_id IS NULL
+        "#,
+    )
+    .execute(pool)
+    .await?;
+
+    // Update transaction network_id based on workspace's network
+    sqlx::query(
+        r#"
+        UPDATE transactions
+        SET network_id = (SELECT network_id FROM workspaces WHERE workspaces.id = transactions.workspace_id)
+        WHERE network_id IS NULL
+        "#,
+    )
+    .execute(pool)
+    .await?;
+
+    Ok(())
+}
+
+/// Seed default blockchains and networks for fresh installs
+async fn seed_blockchains_and_networks(pool: &DbPool) -> Result<(), sqlx::Error> {
+    // Seed blockchains
+    let blockchains = vec![
+        ("ethereum", "Ethereum", "evm"),
+        ("polygon", "Polygon", "evm"),
+        ("base", "Base", "evm"),
+        ("arbitrum", "Arbitrum", "evm"),
+        ("optimism", "Optimism", "evm"),
+        ("avalanche", "Avalanche", "evm"),
+        ("bnb", "BNB Chain", "evm"),
+        ("solana", "Solana", "solana"),
+        ("aptos", "Aptos", "aptos"),
+    ];
+
+    for (id, name, ecosystem) in blockchains {
+        sqlx::query(
+            "INSERT OR IGNORE INTO blockchains (id, name, ecosystem, icon_id) VALUES (?, ?, ?, ?)",
+        )
+        .bind(id)
+        .bind(name)
+        .bind(ecosystem)
+        .bind(id)
+        .execute(pool)
+        .await?;
+    }
+
+    // Seed networks (matching the old chains seed data)
+    let networks = vec![
+        // Ethereum
+        ("ethereum-mainnet", "ethereum", "Mainnet", "mainnet", "https://eth.llamarpc.com", Some(1u64), Some("https://etherscan.io"), Some("https://api.etherscan.io/api"), None::<&str>, "ETH", 18, true),
+        ("ethereum-sepolia", "ethereum", "Sepolia", "testnet", "https://rpc.sepolia.org", Some(11155111u64), Some("https://sepolia.etherscan.io"), Some("https://api-sepolia.etherscan.io/api"), Some("https://sepoliafaucet.com"), "ETH", 18, false),
+        // Polygon
+        ("polygon-mainnet", "polygon", "Mainnet", "mainnet", "https://polygon-rpc.com", Some(137u64), Some("https://polygonscan.com"), Some("https://api.polygonscan.com/api"), None, "MATIC", 18, true),
+        ("polygon-amoy", "polygon", "Amoy", "testnet", "https://rpc-amoy.polygon.technology", Some(80002u64), Some("https://amoy.polygonscan.com"), Some("https://api-amoy.polygonscan.com/api"), Some("https://faucet.polygon.technology"), "MATIC", 18, false),
+        // Base
+        ("base-mainnet", "base", "Mainnet", "mainnet", "https://mainnet.base.org", Some(8453u64), Some("https://basescan.org"), Some("https://api.basescan.org/api"), None, "ETH", 18, true),
+        ("base-sepolia", "base", "Sepolia", "testnet", "https://sepolia.base.org", Some(84532u64), Some("https://sepolia.basescan.org"), Some("https://api-sepolia.basescan.org/api"), Some("https://www.coinbase.com/faucets/base-ethereum-goerli-faucet"), "ETH", 18, false),
+        // Arbitrum
+        ("arbitrum-mainnet", "arbitrum", "One", "mainnet", "https://arb1.arbitrum.io/rpc", Some(42161u64), Some("https://arbiscan.io"), Some("https://api.arbiscan.io/api"), None, "ETH", 18, true),
+        ("arbitrum-sepolia", "arbitrum", "Sepolia", "testnet", "https://sepolia-rollup.arbitrum.io/rpc", Some(421614u64), Some("https://sepolia.arbiscan.io"), Some("https://api-sepolia.arbiscan.io/api"), Some("https://faucet.quicknode.com/arbitrum/sepolia"), "ETH", 18, false),
+        // Solana
+        ("solana-mainnet", "solana", "Mainnet Beta", "mainnet", "https://api.mainnet-beta.solana.com", None, Some("https://explorer.solana.com"), None, None, "SOL", 9, true),
+        ("solana-devnet", "solana", "Devnet", "devnet", "https://api.devnet.solana.com", None, Some("https://explorer.solana.com?cluster=devnet"), None, Some("https://faucet.solana.com"), "SOL", 9, false),
+        // Aptos
+        ("aptos-mainnet", "aptos", "Mainnet", "mainnet", "https://fullnode.mainnet.aptoslabs.com", None, Some("https://explorer.aptoslabs.com"), None, None, "APT", 8, true),
+        ("aptos-testnet", "aptos", "Testnet", "testnet", "https://fullnode.testnet.aptoslabs.com", None, Some("https://explorer.aptoslabs.com?network=testnet"), None, Some("https://aptoslabs.com/testnet-faucet"), "APT", 8, false),
+        ("aptos-devnet", "aptos", "Devnet", "devnet", "https://fullnode.devnet.aptoslabs.com", None, Some("https://explorer.aptoslabs.com?network=devnet"), None, Some("https://aptoslabs.com/devnet-faucet"), "APT", 8, false),
+    ];
+
+    for (id, blockchain_id, name, network_type, rpc_url, chain_id_numeric, explorer_url, explorer_api_url, faucet_url, symbol, decimals, is_default) in networks {
+        sqlx::query(
+            r#"
+            INSERT OR IGNORE INTO networks (
+                id, blockchain_id, name, network_type, rpc_url, chain_id_numeric,
+                explorer_url, explorer_api_url, faucet_url, currency_symbol, currency_decimals, is_default
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            "#,
+        )
+        .bind(id)
+        .bind(blockchain_id)
+        .bind(name)
+        .bind(network_type)
+        .bind(rpc_url)
+        .bind(chain_id_numeric.map(|n| n as i64))
+        .bind(explorer_url)
+        .bind(explorer_api_url)
+        .bind(faucet_url)
+        .bind(symbol)
+        .bind(decimals)
+        .bind(is_default)
+        .execute(pool)
+        .await?;
+    }
+
     Ok(())
 }
 
 /// Create database tables (called before migrations)
 async fn create_tables(pool: &DbPool) -> Result<(), sqlx::Error> {
+    // Create legacy tables first (for backwards compatibility during migration)
     sqlx::query(
         r#"
-        -- Chains table
+        -- Chains table (legacy - will be migrated to blockchains + networks)
         CREATE TABLE IF NOT EXISTS chains (
             id TEXT PRIMARY KEY,
             name TEXT NOT NULL,
@@ -356,7 +684,7 @@ async fn create_tables(pool: &DbPool) -> Result<(), sqlx::Error> {
             FOREIGN KEY (transaction_id) REFERENCES transactions(id) ON DELETE CASCADE
         );
 
-        -- Runs table
+        -- Runs table (legacy build/test/deploy runs)
         CREATE TABLE IF NOT EXISTS runs (
             id TEXT PRIMARY KEY,
             workspace_id TEXT NOT NULL,
@@ -379,7 +707,7 @@ async fn create_tables(pool: &DbPool) -> Result<(), sqlx::Error> {
             FOREIGN KEY (run_id) REFERENCES runs(id) ON DELETE CASCADE
         );
 
-        -- Create indexes
+        -- Create indexes for legacy tables
         CREATE INDEX IF NOT EXISTS idx_wallets_chain_id ON wallets(chain_id);
         CREATE INDEX IF NOT EXISTS idx_workspaces_chain_id ON workspaces(chain_id);
         CREATE INDEX IF NOT EXISTS idx_contracts_workspace_id ON contracts(workspace_id);
@@ -387,6 +715,148 @@ async fn create_tables(pool: &DbPool) -> Result<(), sqlx::Error> {
         CREATE INDEX IF NOT EXISTS idx_transaction_runs_transaction_id ON transaction_runs(transaction_id);
         CREATE INDEX IF NOT EXISTS idx_runs_workspace_id ON runs(workspace_id);
         CREATE INDEX IF NOT EXISTS idx_run_logs_run_id ON run_logs(run_id);
+        "#,
+    )
+    .execute(pool)
+    .await?;
+
+    // Create new v0.0.3 tables
+    create_v003_tables(pool).await?;
+
+    Ok(())
+}
+
+/// Create new tables for v0.0.3 schema
+async fn create_v003_tables(pool: &DbPool) -> Result<(), sqlx::Error> {
+    sqlx::query(
+        r#"
+        -- Blockchains table (parent entity for networks)
+        CREATE TABLE IF NOT EXISTS blockchains (
+            id TEXT PRIMARY KEY,
+            name TEXT NOT NULL,
+            ecosystem TEXT NOT NULL,
+            icon_id TEXT,
+            created_at TEXT NOT NULL DEFAULT (datetime('now'))
+        );
+
+        -- Networks table (replaces chains with proper FK to blockchains)
+        CREATE TABLE IF NOT EXISTS networks (
+            id TEXT PRIMARY KEY,
+            blockchain_id TEXT NOT NULL,
+            name TEXT NOT NULL,
+            network_type TEXT NOT NULL DEFAULT 'custom',
+            rpc_url TEXT NOT NULL,
+            chain_id_numeric INTEGER,
+            explorer_url TEXT,
+            explorer_api_url TEXT,
+            explorer_api_key TEXT,
+            faucet_url TEXT,
+            currency_symbol TEXT NOT NULL,
+            currency_decimals INTEGER NOT NULL DEFAULT 18,
+            is_default INTEGER NOT NULL DEFAULT 0,
+            created_at TEXT NOT NULL DEFAULT (datetime('now')),
+            FOREIGN KEY (blockchain_id) REFERENCES blockchains(id) ON DELETE CASCADE
+        );
+
+        -- Scripts table (workspace sub-entity)
+        CREATE TABLE IF NOT EXISTS scripts (
+            id TEXT PRIMARY KEY,
+            workspace_id TEXT NOT NULL,
+            name TEXT NOT NULL,
+            description TEXT,
+            file_path TEXT NOT NULL,
+            category TEXT,
+            created_at TEXT NOT NULL DEFAULT (datetime('now')),
+            FOREIGN KEY (workspace_id) REFERENCES workspaces(id) ON DELETE CASCADE
+        );
+
+        -- Script flags table
+        CREATE TABLE IF NOT EXISTS script_flags (
+            id TEXT PRIMARY KEY,
+            script_id TEXT NOT NULL,
+            flag_name TEXT NOT NULL,
+            flag_type TEXT NOT NULL DEFAULT 'string',
+            default_value TEXT,
+            required INTEGER NOT NULL DEFAULT 0,
+            description TEXT,
+            FOREIGN KEY (script_id) REFERENCES scripts(id) ON DELETE CASCADE
+        );
+
+        -- Script runs table
+        CREATE TABLE IF NOT EXISTS script_runs (
+            id TEXT PRIMARY KEY,
+            script_id TEXT NOT NULL,
+            started_at TEXT NOT NULL DEFAULT (datetime('now')),
+            finished_at TEXT,
+            status TEXT NOT NULL DEFAULT 'running',
+            exit_code INTEGER,
+            flags_used TEXT,
+            env_vars_used TEXT,
+            logs TEXT,
+            FOREIGN KEY (script_id) REFERENCES scripts(id) ON DELETE CASCADE
+        );
+
+        -- Environment variables table (encrypted values)
+        CREATE TABLE IF NOT EXISTS environment_variables (
+            id TEXT PRIMARY KEY,
+            workspace_id TEXT NOT NULL,
+            key TEXT NOT NULL,
+            value BLOB NOT NULL,
+            description TEXT,
+            created_at TEXT NOT NULL DEFAULT (datetime('now')),
+            FOREIGN KEY (workspace_id) REFERENCES workspaces(id) ON DELETE CASCADE,
+            UNIQUE(workspace_id, key)
+        );
+
+        -- Conversations table (can be workspace-specific or global)
+        CREATE TABLE IF NOT EXISTS conversations (
+            id TEXT PRIMARY KEY,
+            workspace_id TEXT,
+            title TEXT,
+            created_at TEXT NOT NULL DEFAULT (datetime('now')),
+            updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+            FOREIGN KEY (workspace_id) REFERENCES workspaces(id) ON DELETE CASCADE
+        );
+
+        -- Messages table
+        CREATE TABLE IF NOT EXISTS messages (
+            id TEXT PRIMARY KEY,
+            conversation_id TEXT NOT NULL,
+            role TEXT NOT NULL,
+            content TEXT NOT NULL,
+            created_at TEXT NOT NULL DEFAULT (datetime('now')),
+            FOREIGN KEY (conversation_id) REFERENCES conversations(id) ON DELETE CASCADE
+        );
+
+        -- Preferences table (global key-value store)
+        CREATE TABLE IF NOT EXISTS preferences (
+            id TEXT PRIMARY KEY,
+            key TEXT NOT NULL UNIQUE,
+            value TEXT NOT NULL,
+            updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+        );
+
+        -- Contract documentation table (per-function docs)
+        CREATE TABLE IF NOT EXISTS contract_docs (
+            id TEXT PRIMARY KEY,
+            contract_id TEXT NOT NULL,
+            function_name TEXT NOT NULL,
+            description TEXT,
+            notes TEXT,
+            updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+            FOREIGN KEY (contract_id) REFERENCES contracts(id) ON DELETE CASCADE,
+            UNIQUE(contract_id, function_name)
+        );
+
+        -- Create indexes for new tables
+        CREATE INDEX IF NOT EXISTS idx_networks_blockchain_id ON networks(blockchain_id);
+        CREATE INDEX IF NOT EXISTS idx_scripts_workspace_id ON scripts(workspace_id);
+        CREATE INDEX IF NOT EXISTS idx_script_flags_script_id ON script_flags(script_id);
+        CREATE INDEX IF NOT EXISTS idx_script_runs_script_id ON script_runs(script_id);
+        CREATE INDEX IF NOT EXISTS idx_environment_variables_workspace_id ON environment_variables(workspace_id);
+        CREATE INDEX IF NOT EXISTS idx_conversations_workspace_id ON conversations(workspace_id);
+        CREATE INDEX IF NOT EXISTS idx_messages_conversation_id ON messages(conversation_id);
+        CREATE INDEX IF NOT EXISTS idx_contract_docs_contract_id ON contract_docs(contract_id);
         "#,
     )
     .execute(pool)

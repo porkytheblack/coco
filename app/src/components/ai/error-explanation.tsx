@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { Loader2, Lightbulb } from 'lucide-react';
 import Image from 'next/image';
 import { useAIStore } from '@/stores';
@@ -13,30 +13,58 @@ interface ErrorExplanationProps {
   context?: AIContext;
 }
 
+// Module-level cache for error explanations to persist across component remounts
+const explanationCache = new Map<string, ErrorExplanationType>();
+
+// Generate a cache key from error message and context
+function getCacheKey(errorMessage: string, context?: AIContext): string {
+  return `${errorMessage}::${JSON.stringify(context || {})}`;
+}
+
 export function ErrorExplanation({ errorMessage, context }: ErrorExplanationProps) {
   const { settings } = useAIStore();
-  const [explanation, setExplanation] = useState<ErrorExplanationType | null>(null);
+  const cacheKey = getCacheKey(errorMessage, context);
+  const cachedExplanation = explanationCache.get(cacheKey);
+
+  const [explanation, setExplanation] = useState<ErrorExplanationType | null>(cachedExplanation || null);
   const [isLoading, setIsLoading] = useState(false);
-  const [isExpanded, setIsExpanded] = useState(false);
+  const [isExpanded, setIsExpanded] = useState(!!cachedExplanation);
+
+  // Track if we've already fetched for this error to prevent duplicate requests
+  const fetchedRef = useRef<string | null>(cachedExplanation ? cacheKey : null);
 
   useEffect(() => {
-    if (settings.enabled && errorMessage && !explanation) {
+    // Only auto-fetch if enabled, we have an error, and haven't fetched this error before
+    if (settings.enabled && errorMessage && fetchedRef.current !== cacheKey && !cachedExplanation) {
       explainError();
     }
-  }, [errorMessage, settings.enabled]);
+  }, [errorMessage, settings.enabled, cacheKey]);
 
   const explainError = async () => {
     if (!settings.enabled || isLoading) return;
 
+    // Check cache first
+    const cached = explanationCache.get(cacheKey);
+    if (cached) {
+      setExplanation(cached);
+      setIsExpanded(true);
+      fetchedRef.current = cacheKey;
+      return;
+    }
+
     setIsLoading(true);
+    fetchedRef.current = cacheKey;
     try {
       const currentConfig = settings.providers[settings.provider];
       aiService.setAdapter(settings.provider, currentConfig);
       const result = await aiService.explainError(errorMessage, context);
+      // Cache the result
+      explanationCache.set(cacheKey, result);
       setExplanation(result);
       setIsExpanded(true);
     } catch (error) {
       console.error('Failed to explain error:', error);
+      fetchedRef.current = null; // Allow retry on error
     } finally {
       setIsLoading(false);
     }

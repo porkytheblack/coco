@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState, useCallback } from 'react';
-import { Settings, Plus, Play, Rocket, Copy, ExternalLink, Trash2, RefreshCw, ArrowUpRight, ArrowDownLeft, Sun, Moon, Search, Send, Droplet } from 'lucide-react';
+import { Settings, Plus, Play, Rocket, Copy, ExternalLink, Trash2, RefreshCw, ArrowUpRight, ArrowDownLeft, Sun, Moon, Search, Send, Droplet, FileCode, Key, Files } from 'lucide-react';
 import Image from 'next/image';
 import { TopBar } from '@/components/layout';
 import { IconButton, Button, StatusIndicator, CocoLogo } from '@/components/ui';
@@ -11,6 +11,8 @@ import { AddChainModal, ChainSettingsModal, BlockchainGrid, NetworkSelectionModa
 import { ContractList, AddContractModal, EditContractModal, ContractPanel } from '@/components/contracts';
 import { TransactionPanel, CreateTransactionModal } from '@/components/transactions';
 import { AISettingsModal, CocoChatModal } from '@/components/ai';
+import { ScriptList } from '@/components/scripts';
+import { EnvVarList } from '@/components/env';
 import { useChainStore, useWalletStore, useWorkspaceStore, useToastStore, useThemeStore, useAIStore } from '@/stores';
 import { openExternal } from '@/lib/tauri/commands';
 import { clsx } from 'clsx';
@@ -31,6 +33,9 @@ export default function AppPage() {
   const [showAddChain, setShowAddChain] = useState(false);
   const [selectedBlockchain, setSelectedBlockchain] = useState<BlockchainDefinition | null>(null);
   const [showNetworkModal, setShowNetworkModal] = useState(false);
+  const [addChainBlockchain, setAddChainBlockchain] = useState<BlockchainDefinition | null>(null);
+  const [chainToEdit, setChainToEdit] = useState<typeof chains[0] | null>(null);
+  const [showChainEditModal, setShowChainEditModal] = useState(false);
 
   // Chain selection page state
   const { chains, selectedChain, selectChain, addChain, updateChain, deleteChain, loadChains } = useChainStore();
@@ -71,6 +76,7 @@ export default function AppPage() {
   const [showSettings, setShowSettings] = useState(false);
   const [showCreateTransaction, setShowCreateTransaction] = useState(false);
   const [selectedContract, setSelectedContract] = useState<typeof contracts[0] | null>(null);
+  const [workspaceTab, setWorkspaceTab] = useState<'contracts' | 'scripts' | 'env'>('contracts');
 
   // AI and theme state
   const { theme, toggleTheme } = useThemeStore();
@@ -237,13 +243,74 @@ export default function AppPage() {
             setSelectedBlockchain(null);
             navigate('chain-dashboard', chain.id);
           }}
+          onAddCustomNetwork={(blockchain) => {
+            setShowNetworkModal(false);
+            setAddChainBlockchain(blockchain);
+            setShowAddChain(true);
+          }}
+          onEditChain={(chain) => {
+            setShowNetworkModal(false);
+            setSelectedBlockchain(null);
+            setChainToEdit(chain);
+            setShowChainEditModal(true);
+          }}
+          onDeleteChain={async (chain) => {
+            try {
+              await deleteChain(chain.id);
+              addToast({ type: 'success', title: `${chain.name} deleted` });
+            } catch (error) {
+              addToast({
+                type: 'error',
+                title: 'Failed to delete chain',
+                message: error instanceof Error ? error.message : 'Unknown error',
+              });
+            }
+          }}
         />
 
         <AddChainModal
           isOpen={showAddChain}
-          onClose={() => setShowAddChain(false)}
+          onClose={() => {
+            setShowAddChain(false);
+            setAddChainBlockchain(null);
+          }}
           onAdd={async (req) => {
             await addChain(req);
+            setAddChainBlockchain(null);
+          }}
+          blockchain={addChainBlockchain}
+        />
+
+        <ChainSettingsModal
+          chain={chainToEdit}
+          isOpen={showChainEditModal}
+          onClose={() => {
+            setShowChainEditModal(false);
+            setChainToEdit(null);
+          }}
+          onSave={async (updates) => {
+            if (chainToEdit) {
+              await updateChain(chainToEdit.id, {
+                name: updates.name,
+                rpcUrl: updates.rpcUrl,
+                chainIdNumeric: updates.chainIdNumeric,
+                blockExplorerUrl: updates.blockExplorerUrl,
+                blockExplorerApiUrl: updates.blockExplorerApiUrl,
+                blockExplorerApiKey: updates.blockExplorerApiKey,
+                faucetUrl: updates.faucetUrl,
+              });
+              addToast({ type: 'success', title: 'Chain settings saved' });
+              setShowChainEditModal(false);
+              setChainToEdit(null);
+            }
+          }}
+          onDelete={async () => {
+            if (chainToEdit) {
+              await deleteChain(chainToEdit.id);
+              addToast({ type: 'success', title: 'Chain deleted' });
+              setShowChainEditModal(false);
+              setChainToEdit(null);
+            }
           }}
         />
 
@@ -650,6 +717,12 @@ export default function AppPage() {
       navigate('chain-dashboard', appState.chainId);
     };
 
+    const workspaceTabs = [
+      { id: 'contracts' as const, label: 'Contracts', icon: Files },
+      { id: 'scripts' as const, label: 'Scripts', icon: FileCode },
+      { id: 'env' as const, label: 'Environment', icon: Key },
+    ];
+
     return (
       <div className="h-screen flex flex-col overflow-hidden">
         <TopBar
@@ -664,113 +737,157 @@ export default function AppPage() {
                 label="Settings"
                 onClick={() => setShowSettings(true)}
               />
-              <IconButton
-                icon={<Plus className="w-5 h-5" />}
-                label="Add contract"
-                onClick={() => setShowAddContract(true)}
-              />
+              {workspaceTab === 'contracts' && (
+                <IconButton
+                  icon={<Plus className="w-5 h-5" />}
+                  label="Add contract"
+                  onClick={() => setShowAddContract(true)}
+                />
+              )}
             </>
           }
         />
 
-        <div className="flex-1 flex overflow-hidden">
-          {/* Sidebar with Contracts and Transactions */}
-          <aside className="w-80 border-r border-coco-border-subtle flex flex-col overflow-hidden">
-            {/* Contracts Section */}
-            <div className="p-4 border-b border-coco-border-subtle flex-shrink-0">
-              <ContractList
-                contracts={contracts}
-                onContractClick={(contract) => {
-                  setSelectedContract(contract);
-                  selectTransaction(null);
-                }}
-                onAddContract={() => setShowAddContract(true)}
-              />
-            </div>
+        {/* Workspace Tabs */}
+        <div className="border-b border-coco-border-subtle bg-coco-bg-elevated">
+          <div className="flex gap-1 px-4">
+            {workspaceTabs.map((tab) => {
+              const TabIcon = tab.icon;
+              return (
+                <button
+                  key={tab.id}
+                  onClick={() => setWorkspaceTab(tab.id)}
+                  className={clsx(
+                    'flex items-center gap-2 px-4 py-3 text-sm font-medium transition-colors',
+                    'border-b-2 -mb-[1px]',
+                    workspaceTab === tab.id
+                      ? 'text-coco-accent border-coco-accent'
+                      : 'text-coco-text-secondary border-transparent hover:text-coco-text-primary hover:bg-coco-bg-secondary'
+                  )}
+                >
+                  <TabIcon className="w-4 h-4" />
+                  {tab.label}
+                </button>
+              );
+            })}
+          </div>
+        </div>
 
-            {/* Transactions Section */}
-            <div className="flex-1 flex flex-col min-h-0">
-              <div className="p-3 border-b border-coco-border-subtle">
-                <h2 className="text-sm font-semibold text-coco-text-primary">Transactions</h2>
-              </div>
-              <div className="flex-1 overflow-y-auto">
-                {transactions.map((tx) => (
+        <div className="flex-1 flex overflow-hidden">
+          {/* Contracts Tab Content */}
+          {workspaceTab === 'contracts' && (
+            <>
+              {/* Sidebar with Contracts and Transactions */}
+              <aside className="w-80 border-r border-coco-border-subtle flex flex-col overflow-hidden">
+                {/* Contracts Section */}
+                <div className="p-4 border-b border-coco-border-subtle flex-shrink-0">
+                  <ContractList
+                    contracts={contracts}
+                    onContractClick={(contract) => {
+                      setSelectedContract(contract);
+                      selectTransaction(null);
+                    }}
+                    onAddContract={() => setShowAddContract(true)}
+                  />
+                </div>
+
+                {/* Transactions Section */}
+                <div className="flex-1 flex flex-col min-h-0">
+                  <div className="p-3 border-b border-coco-border-subtle">
+                    <h2 className="text-sm font-semibold text-coco-text-primary">Transactions</h2>
+                  </div>
+                  <div className="flex-1 overflow-y-auto">
+                    {transactions.map((tx) => (
+                      <button
+                        key={tx.id}
+                        onClick={() => {
+                          selectTransaction(tx);
+                          setSelectedContract(null);
+                        }}
+                        className={clsx(
+                          'w-full px-4 py-2 text-left border-b border-coco-border-subtle',
+                          'transition-all duration-base',
+                          selectedTransaction?.id === tx.id
+                            ? 'bg-coco-bg-tertiary border-l-2 border-l-coco-accent'
+                            : 'hover:bg-coco-bg-secondary'
+                        )}
+                      >
+                        <div className="flex items-center gap-2">
+                          <span className="w-2 h-2 rounded-full bg-coco-success flex-shrink-0" />
+                          <span className="text-sm font-medium text-coco-text-primary truncate">
+                            {tx.name || tx.id.slice(0, 10)}
+                          </span>
+                        </div>
+                      </button>
+                    ))}
+                  </div>
                   <button
-                    key={tx.id}
-                    onClick={() => {
-                      selectTransaction(tx);
+                    onClick={() => setShowCreateTransaction(true)}
+                    className="flex-shrink-0 p-3 text-sm text-coco-accent hover:bg-coco-bg-secondary border-t border-coco-border-subtle"
+                  >
+                    + New transaction
+                  </button>
+                </div>
+              </aside>
+
+              {/* Main Content */}
+              <main className="flex-1 p-6 overflow-y-auto">
+                {selectedContract ? (
+                  <ContractPanel
+                    contract={selectedContract}
+                    onCreateTransaction={() => {
+                      setShowCreateTransaction(true);
+                    }}
+                    onEdit={(contract) => {
+                      setContractToEdit(contract);
+                      setShowEditContract(true);
+                    }}
+                    onDelete={async (contractId) => {
+                      await deleteContract(contractId);
                       setSelectedContract(null);
                     }}
-                    className={clsx(
-                      'w-full px-4 py-2 text-left border-b border-coco-border-subtle',
-                      'transition-all duration-base',
-                      selectedTransaction?.id === tx.id
-                        ? 'bg-coco-bg-tertiary border-l-2 border-l-coco-accent'
-                        : 'hover:bg-coco-bg-secondary'
-                    )}
-                  >
-                    <div className="flex items-center gap-2">
-                      <span className="w-2 h-2 rounded-full bg-coco-success flex-shrink-0" />
-                      <span className="text-sm font-medium text-coco-text-primary truncate">
-                        {tx.name || tx.id.slice(0, 10)}
-                      </span>
-                    </div>
-                  </button>
-                ))}
-              </div>
-              <button
-                onClick={() => setShowCreateTransaction(true)}
-                className="flex-shrink-0 p-3 text-sm text-coco-accent hover:bg-coco-bg-secondary border-t border-coco-border-subtle"
-              >
-                + New transaction
-              </button>
-            </div>
-          </aside>
+                  />
+                ) : selectedTransaction ? (
+                  <TransactionPanel
+                    transaction={selectedTransaction}
+                    wallets={wallets}
+                    onExecute={async (payload, walletId) => {
+                      return await executeTransaction(
+                        selectedTransaction.id,
+                        payload,
+                        walletId,
+                        selectedChain ? { chain: selectedChain } : undefined
+                      );
+                    }}
+                    onDelete={async () => {
+                      await deleteTransaction(selectedTransaction.id);
+                    }}
+                    runs={getTransactionRuns(selectedTransaction.id)}
+                    blockExplorerUrl={selectedChain?.blockExplorerUrl}
+                    ecosystem={selectedChain?.ecosystem}
+                  />
+                ) : (
+                  <div className="flex items-center justify-center h-full text-coco-text-tertiary">
+                    Select a contract or transaction
+                  </div>
+                )}
+              </main>
+            </>
+          )}
 
-          {/* Main Content */}
-          <main className="flex-1 p-6 overflow-y-auto">
-            {selectedContract ? (
-              <ContractPanel
-                contract={selectedContract}
-                onCreateTransaction={() => {
-                  // Create a new transaction for this function
-                  setShowCreateTransaction(true);
-                }}
-                onEdit={(contract) => {
-                  setContractToEdit(contract);
-                  setShowEditContract(true);
-                }}
-                onDelete={async (contractId) => {
-                  await deleteContract(contractId);
-                  setSelectedContract(null);
-                }}
-              />
-            ) : selectedTransaction ? (
-              <TransactionPanel
-                transaction={selectedTransaction}
-                wallets={wallets}
-                onExecute={async (payload, walletId) => {
-                  // Pass chain context for real on-chain execution
-                  return await executeTransaction(
-                    selectedTransaction.id,
-                    payload,
-                    walletId,
-                    selectedChain ? { chain: selectedChain } : undefined
-                  );
-                }}
-                onDelete={async () => {
-                  await deleteTransaction(selectedTransaction.id);
-                }}
-                runs={getTransactionRuns(selectedTransaction.id)}
-                blockExplorerUrl={selectedChain?.blockExplorerUrl}
-                ecosystem={selectedChain?.ecosystem}
-              />
-            ) : (
-              <div className="flex items-center justify-center h-full text-coco-text-tertiary">
-                Select a contract or transaction
-              </div>
-            )}
-          </main>
+          {/* Scripts Tab Content */}
+          {workspaceTab === 'scripts' && currentWorkspace && (
+            <main className="flex-1 p-6 overflow-y-auto">
+              <ScriptList workspaceId={currentWorkspace.id} />
+            </main>
+          )}
+
+          {/* Environment Variables Tab Content */}
+          {workspaceTab === 'env' && currentWorkspace && (
+            <main className="flex-1 p-6 overflow-y-auto">
+              <EnvVarList workspaceId={currentWorkspace.id} />
+            </main>
+          )}
         </div>
 
         {/* Workspace Modals */}
