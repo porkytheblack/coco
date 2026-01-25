@@ -131,11 +131,19 @@ export const evmAdapter: ChainAdapter = {
         })
         .filter(Boolean);
 
+      // Calculate transaction fee from gas used and gas price
+      const gasPrice = receipt.gasPrice?.toString();
+      const fee = receipt.gasPrice
+        ? (receipt.gasUsed * receipt.gasPrice).toString()
+        : undefined;
+
       return {
         success: true,
         txHash: receipt.hash,
         blockNumber: receipt.blockNumber,
         gasUsed: receipt.gasUsed.toString(),
+        gasPrice,
+        fee,
         events,
       };
     } catch (error) {

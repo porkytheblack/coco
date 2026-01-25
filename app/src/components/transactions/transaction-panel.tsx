@@ -736,6 +736,8 @@ export function TransactionPanel({
                           <ErrorExplanation
                             errorMessage={run.errorMessage}
                             context={{ ecosystem }}
+                            runId={run.id}
+                            savedExplanation={run.aiExplanation}
                           />
                         </div>
                       )}

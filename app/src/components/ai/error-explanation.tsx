@@ -5,12 +5,15 @@ import { Loader2, Lightbulb } from 'lucide-react';
 import Image from 'next/image';
 import { useAIStore } from '@/stores';
 import { aiService } from '@/lib/ai';
-import type { AIContext } from '@/types';
+import * as tauri from '@/lib/tauri/commands';
+import type { AIContext, AIExplanation } from '@/types';
 import type { ErrorExplanation as ErrorExplanationType } from '@/lib/ai/types';
 
 interface ErrorExplanationProps {
   errorMessage: string;
   context?: AIContext;
+  runId?: string;
+  savedExplanation?: AIExplanation;
 }
 
 // Module-level cache for error explanations to persist across component remounts
@@ -21,24 +24,37 @@ function getCacheKey(errorMessage: string, context?: AIContext): string {
   return `${errorMessage}::${JSON.stringify(context || {})}`;
 }
 
-export function ErrorExplanation({ errorMessage, context }: ErrorExplanationProps) {
+export function ErrorExplanation({ errorMessage, context, runId, savedExplanation }: ErrorExplanationProps) {
   const { settings } = useAIStore();
   const cacheKey = getCacheKey(errorMessage, context);
   const cachedExplanation = explanationCache.get(cacheKey);
 
-  const [explanation, setExplanation] = useState<ErrorExplanationType | null>(cachedExplanation || null);
+  // Use saved explanation from database if available, otherwise fall back to cache
+  const initialExplanation = savedExplanation || cachedExplanation || null;
+
+  const [explanation, setExplanation] = useState<ErrorExplanationType | null>(initialExplanation);
   const [isLoading, setIsLoading] = useState(false);
-  const [isExpanded, setIsExpanded] = useState(!!cachedExplanation);
+  const [isExpanded, setIsExpanded] = useState(!!initialExplanation);
 
   // Track if we've already fetched for this error to prevent duplicate requests
-  const fetchedRef = useRef<string | null>(cachedExplanation ? cacheKey : null);
+  const fetchedRef = useRef<string | null>(initialExplanation ? cacheKey : null);
 
   useEffect(() => {
+    // If we have a saved explanation from the database, use it
+    if (savedExplanation) {
+      setExplanation(savedExplanation);
+      setIsExpanded(true);
+      fetchedRef.current = cacheKey;
+      // Also update the cache
+      explanationCache.set(cacheKey, savedExplanation);
+      return;
+    }
+
     // Only auto-fetch if enabled, we have an error, and haven't fetched this error before
     if (settings.enabled && errorMessage && fetchedRef.current !== cacheKey && !cachedExplanation) {
       explainError();
     }
-  }, [errorMessage, settings.enabled, cacheKey]);
+  }, [errorMessage, settings.enabled, cacheKey, savedExplanation]);
 
   const explainError = async () => {
     if (!settings.enabled || isLoading) return;
@@ -62,6 +78,20 @@ export function ErrorExplanation({ errorMessage, context }: ErrorExplanationProp
       explanationCache.set(cacheKey, result);
       setExplanation(result);
       setIsExpanded(true);
+
+      // Persist to database if we have a runId
+      if (runId && tauri.checkIsTauri()) {
+        try {
+          await tauri.updateTransactionRunExplanation(runId, {
+            summary: result.summary,
+            details: result.details,
+            suggestions: result.suggestions,
+          });
+        } catch (persistError) {
+          // Log but don't fail - the explanation is still displayed
+          console.error('Failed to persist AI explanation:', persistError);
+        }
+      }
     } catch (error) {
       console.error('Failed to explain error:', error);
       fetchedRef.current = null; // Allow retry on error

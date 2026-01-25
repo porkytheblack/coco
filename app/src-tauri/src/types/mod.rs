@@ -325,6 +325,14 @@ pub struct DecodedEvent {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+pub struct AIExplanation {
+    pub summary: String,
+    pub details: String,
+    pub suggestions: Vec<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct TransactionRun {
     pub id: String,
     pub transaction_id: String,
@@ -340,6 +348,7 @@ pub struct TransactionRun {
     pub started_at: DateTime<Utc>,
     pub finished_at: Option<DateTime<Utc>>,
     pub duration_ms: Option<u64>,
+    pub ai_explanation: Option<AIExplanation>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

@@ -381,6 +381,14 @@ export async function listTransactionRuns(
   return invoke<import('@/types').TransactionRun[]>('list_transaction_runs', { transactionId });
 }
 
+export async function updateTransactionRunExplanation(
+  runId: string,
+  aiExplanation: import('@/types').AIExplanation
+): Promise<void> {
+  if (!checkIsTauri()) throw new Error('Not running in Tauri');
+  return invoke<void>('update_transaction_run_explanation', { runId, aiExplanation });
+}
+
 // ============================================================================
 // Blockchain & Network commands (v0.0.3)
 // ============================================================================

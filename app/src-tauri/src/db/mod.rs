@@ -399,6 +399,34 @@ async fn run_migrations(pool: &DbPool) -> Result<(), sqlx::Error> {
             .ok();
     }
 
+    // Migration: Add missing columns to transaction_runs for result/output tracking
+    let transaction_run_columns = [
+        ("result", "TEXT"),
+        ("fee", "TEXT"),
+        ("finished_at", "TEXT"),
+        ("duration_ms", "INTEGER"),
+        ("ai_explanation", "TEXT"),
+    ];
+
+    for (col_name, col_type) in transaction_run_columns {
+        let columns: Vec<(String,)> = sqlx::query_as(&format!(
+            "SELECT name FROM pragma_table_info('transaction_runs') WHERE name = '{}'",
+            col_name
+        ))
+        .fetch_all(pool)
+        .await?;
+
+        if columns.is_empty() {
+            sqlx::query(&format!(
+                "ALTER TABLE transaction_runs ADD COLUMN {} {}",
+                col_name, col_type
+            ))
+            .execute(pool)
+            .await
+            .ok();
+        }
+    }
+
     Ok(())
 }
 

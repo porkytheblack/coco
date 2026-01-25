@@ -7,6 +7,8 @@ export interface CallResult {
   txHash?: string;
   blockNumber?: number;
   gasUsed?: string;
+  gasPrice?: string;
+  fee?: string;
   events?: { name: string; args: Record<string, unknown> }[];
 }
 

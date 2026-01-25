@@ -202,6 +202,12 @@ export interface Transaction {
   lastRun?: TransactionRun;
 }
 
+export interface AIExplanation {
+  summary: string;
+  details: string;
+  suggestions: string[];
+}
+
 export interface TransactionRun {
   id: string;
   transactionId: string;
@@ -217,6 +223,7 @@ export interface TransactionRun {
   startedAt: string;
   finishedAt?: string;
   durationMs?: number;
+  aiExplanation?: AIExplanation;
 }
 
 export interface DecodedEvent {

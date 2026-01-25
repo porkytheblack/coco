@@ -1,6 +1,6 @@
 use tauri::State;
 
-use crate::types::{Contract, ContractWithChain, Transaction, TransactionRun, Workspace};
+use crate::types::{AIExplanation, Contract, ContractWithChain, Transaction, TransactionRun, Workspace};
 use crate::AppState;
 
 #[tauri::command]
@@ -250,6 +250,19 @@ pub async fn list_transaction_runs(
     state
         .workspace_service
         .list_transaction_runs(&transaction_id)
+        .await
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub async fn update_transaction_run_explanation(
+    run_id: String,
+    ai_explanation: AIExplanation,
+    state: State<'_, AppState>,
+) -> Result<(), String> {
+    state
+        .workspace_service
+        .update_transaction_run_ai_explanation(&run_id, &ai_explanation)
         .await
         .map_err(|e| e.to_string())
 }

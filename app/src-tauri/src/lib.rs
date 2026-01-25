@@ -142,6 +142,7 @@ pub fn run() {
             commands::workspaces::execute_transaction,
             commands::workspaces::save_transaction_run,
             commands::workspaces::list_transaction_runs,
+            commands::workspaces::update_transaction_run_explanation,
             // Run commands (legacy)
             commands::runs::start_build,
             commands::runs::start_test,

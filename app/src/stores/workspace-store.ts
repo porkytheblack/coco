@@ -739,6 +739,7 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
               txHash: txResult.txHash,
               blockNumber: txResult.blockNumber,
               gasUsed: txResult.gasUsed ? parseInt(txResult.gasUsed, 10) : undefined,
+              fee: txResult.fee,
               status: 'success',
               events: txResult.events?.map((e: { name: string; args: Record<string, unknown> }) => ({
                 name: e.name,
