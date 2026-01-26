@@ -29,6 +29,7 @@ export class OpenRouterAdapter extends BaseAIAdapter {
         model: this.model,
         messages: openRouterMessages,
         max_tokens: 16384,
+        temperature: 0.3,
       }),
     });
 

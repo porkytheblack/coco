@@ -387,28 +387,78 @@ export function CocoChatDrawer({ isOpen, onClose, context }: CocoChatDrawerProps
 
       setActionResult(result);
 
-      // Add result message
-      if (result.success) {
-        addMessage({
-          role: 'assistant',
-          content: `✅ **Action completed:** ${result.message}${result.data ? `\n\n\`\`\`json\n${JSON.stringify(result.data, null, 2)}\n\`\`\`` : ''}`,
-        });
-      } else {
-        addMessage({
-          role: 'assistant',
-          content: `❌ **Action failed:** ${result.message}${result.error ? `\n\n\`${result.error}\`` : ''}`,
-        });
+      // Format result summary for AI context
+      const resultSummary = result.success
+        ? `${result.message}${result.data ? `\nData: ${JSON.stringify(result.data)}` : ''}`
+        : `Failed: ${result.message}${result.error ? ` (${result.error})` : ''}`;
+
+      // Add result message to chat (for user to see)
+      addMessage({
+        role: 'assistant',
+        content: result.success
+          ? `✅ ${result.message}${result.data ? `\n\n\`\`\`json\n${JSON.stringify(result.data, null, 2)}\n\`\`\`` : ''}`
+          : `❌ ${result.message}${result.error ? `\n\n\`${result.error}\`` : ''}`,
+      });
+
+      // Clear pending action
+      setPendingAction(null);
+      setIsExecutingAction(false);
+
+      // Continue conversation - send result to AI to get follow-up answer
+      setProcessing(true);
+
+      try {
+        const currentConfig = settings.providers[settings.provider];
+        aiService.setAdapter(settings.provider, currentConfig);
+
+        // Build message history including the action result as context
+        const updatedHistory = useAIStore.getState().chatHistory;
+        const messageHistory = [
+          ...updatedHistory.map(msg => ({
+            role: msg.role as 'user' | 'assistant',
+            content: msg.content,
+          })),
+          // Prompt the AI to continue based on the result
+          { role: 'user' as const, content: `[Action "${pendingAction.action}" result: ${resultSummary}]\n\nBriefly summarize or answer based on this result.` },
+        ];
+
+        // Get AI follow-up response
+        const response = await aiService.chatWithHistory(messageHistory, enrichedContext, false);
+
+        // Check if response contains another action
+        const parsedAction = parseActionFromResponse(response);
+
+        if (parsedAction) {
+          setPendingAction({
+            ...parsedAction,
+            inferredFrom: currentContextDescription,
+          });
+          const cleanResponse = removeActionBlock(response);
+          if (cleanResponse) {
+            addMessage({ role: 'assistant', content: cleanResponse });
+          }
+        } else {
+          addMessage({ role: 'assistant', content: response });
+        }
+      } catch (error) {
+        // If follow-up fails, that's okay - we already showed the result
+        console.error('Follow-up AI call failed:', error);
+      } finally {
+        setProcessing(false);
       }
     } catch (error) {
       setActionResult({
         success: false,
         message: `Failed to execute action: ${error instanceof Error ? error.message : 'Unknown error'}`,
       });
-    } finally {
+      addMessage({
+        role: 'assistant',
+        content: `❌ Failed to execute action: ${error instanceof Error ? error.message : 'Unknown error'}`,
+      });
       setIsExecutingAction(false);
       setPendingAction(null);
     }
-  }, [pendingAction, editableParams, context, chainStore.selectedChain?.id, workspaceStore.currentWorkspace?.id, walletStore.selectedWallet?.id, addMessage]);
+  }, [pendingAction, editableParams, context, chainStore.selectedChain?.id, workspaceStore.currentWorkspace?.id, walletStore.selectedWallet?.id, addMessage, settings, enrichedContext, currentContextDescription, setProcessing]);
 
   // Cancel a pending action
   const handleCancelAction = useCallback(() => {

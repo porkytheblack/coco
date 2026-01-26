@@ -27,6 +27,7 @@ export class OpenAIAdapter extends BaseAIAdapter {
         model: this.model,
         messages: openaiMessages,
         max_tokens: 16384,
+        temperature: 0.3,
       }),
     });
 

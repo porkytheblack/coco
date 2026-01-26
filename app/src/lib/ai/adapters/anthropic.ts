@@ -30,6 +30,7 @@ export class AnthropicAdapter extends BaseAIAdapter {
       body: JSON.stringify({
         model: this.model,
         max_tokens: 16384,
+        temperature: 0.3,
         system: systemPrompt,
         messages: anthropicMessages,
       }),

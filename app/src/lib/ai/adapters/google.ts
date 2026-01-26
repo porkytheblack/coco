@@ -34,6 +34,7 @@ export class GoogleAdapter extends BaseAIAdapter {
           },
           generationConfig: {
             maxOutputTokens: 16384,
+            temperature: 0.3,
           },
         }),
       }
