@@ -890,6 +890,19 @@ fn status_to_string(status: &ScriptRunStatus) -> &'static str {
     }
 }
 
+/// Get the shell command and argument prefix for the current platform
+/// Returns (shell_path, shell_arg) - e.g., ("/bin/sh", "-c") on Unix or ("cmd.exe", "/C") on Windows
+fn get_shell_command() -> (&'static str, &'static str) {
+    #[cfg(target_os = "windows")]
+    {
+        ("cmd.exe", "/C")
+    }
+    #[cfg(not(target_os = "windows"))]
+    {
+        ("/bin/sh", "-c")
+    }
+}
+
 /// Build a command based on the script runner type
 fn build_command(script: &Script, flags: &HashMap<String, String>) -> Command {
     let mut args: Vec<String> = Vec::new();
@@ -921,12 +934,13 @@ fn build_command(script: &Script, flags: &HashMap<String, String>) -> Command {
 
     match script.runner {
         ScriptRunner::Bash => {
-            let mut cmd = Command::new("sh");
+            let (shell, shell_arg) = get_shell_command();
+            let mut cmd = Command::new(shell);
             let mut cmd_str = script.file_path.clone();
             for arg in &args {
                 cmd_str.push_str(&format!(" {}", arg));
             }
-            cmd.arg("-c").arg(cmd_str);
+            cmd.arg(shell_arg).arg(cmd_str);
             cmd
         }
         ScriptRunner::Node => {
@@ -962,16 +976,20 @@ fn build_command(script: &Script, flags: &HashMap<String, String>) -> Command {
             cmd
         }
         ScriptRunner::Custom => {
-            let base_cmd = script.command.as_deref().unwrap_or("sh");
-            let mut cmd = Command::new("sh");
+            let (shell, shell_arg) = get_shell_command();
+            let base_cmd = script.command.as_deref().unwrap_or("");
+            let mut cmd = Command::new(shell);
             let mut cmd_str = base_cmd.to_string();
             if !script.file_path.is_empty() && script.file_path != "." {
-                cmd_str.push_str(&format!(" {}", script.file_path));
+                if !cmd_str.is_empty() {
+                    cmd_str.push(' ');
+                }
+                cmd_str.push_str(&script.file_path);
             }
             for arg in &args {
                 cmd_str.push_str(&format!(" {}", arg));
             }
-            cmd.arg("-c").arg(cmd_str);
+            cmd.arg(shell_arg).arg(cmd_str);
             cmd
         }
         // =====================
