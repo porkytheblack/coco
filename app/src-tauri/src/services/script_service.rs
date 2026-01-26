@@ -13,6 +13,67 @@ use tokio::process::Command;
 use tokio::sync::RwLock;
 use uuid::Uuid;
 
+/// Get an enhanced PATH that includes common tool installation directories.
+/// This is necessary because GUI apps on macOS/Windows don't inherit the user's shell PATH.
+fn get_enhanced_path() -> String {
+    let current_path = std::env::var("PATH").unwrap_or_default();
+
+    #[cfg(target_os = "macos")]
+    {
+        let home = std::env::var("HOME").unwrap_or_default();
+        let additional_paths = [
+            "/opt/homebrew/bin".to_string(),           // Homebrew on Apple Silicon
+            "/opt/homebrew/sbin".to_string(),
+            "/usr/local/bin".to_string(),              // Homebrew on Intel Macs
+            "/usr/local/sbin".to_string(),
+            format!("{}/.cargo/bin", home),            // Rust/Cargo (forge, etc.)
+            format!("{}/.local/bin", home),            // pipx, local installs
+            "/usr/local/share/npm/bin".to_string(),    // Global npm packages
+            format!("{}/Library/pnpm", home),          // pnpm global bin
+            format!("{}/.bun/bin", home),              // Bun
+        ];
+        let mut paths: Vec<&str> = additional_paths.iter().map(|s| s.as_str()).collect();
+        if !current_path.is_empty() {
+            paths.push(&current_path);
+        }
+        paths.join(":")
+    }
+
+    #[cfg(target_os = "windows")]
+    {
+        let userprofile = std::env::var("USERPROFILE").unwrap_or_default();
+        let appdata = std::env::var("APPDATA").unwrap_or_default();
+        let localappdata = std::env::var("LOCALAPPDATA").unwrap_or_default();
+        let additional_paths = [
+            format!(r"{}\.cargo\bin", userprofile),     // Rust/Cargo
+            format!(r"{}\npm", appdata),                // Global npm packages
+            format!(r"{}\pnpm", localappdata),          // pnpm
+            format!(r"{}\.bun\bin", userprofile),       // Bun
+            r"C:\Program Files\nodejs".to_string(),    // Node.js default install
+        ];
+        let mut paths: Vec<&str> = additional_paths.iter().map(|s| s.as_str()).collect();
+        if !current_path.is_empty() {
+            paths.push(&current_path);
+        }
+        paths.join(";")
+    }
+
+    #[cfg(not(any(target_os = "macos", target_os = "windows")))]
+    {
+        let home = std::env::var("HOME").unwrap_or_default();
+        let additional_paths = [
+            format!("{}/.cargo/bin", home),            // Rust/Cargo
+            format!("{}/.local/bin", home),            // Local installs
+            "/usr/local/bin".to_string(),
+        ];
+        let mut paths: Vec<&str> = additional_paths.iter().map(|s| s.as_str()).collect();
+        if !current_path.is_empty() {
+            paths.push(&current_path);
+        }
+        paths.join(":")
+    }
+}
+
 pub struct ScriptService {
     db: DbPool,
     /// Cancellation tokens for active script runs - when removed, signals cancellation
@@ -422,7 +483,10 @@ impl ScriptService {
             cmd.current_dir(wd);
         }
 
-        // Set environment variables
+        // Set enhanced PATH for production builds (GUI apps don't inherit shell PATH)
+        cmd.env("PATH", get_enhanced_path());
+
+        // Set user-specified environment variables
         for (key, value) in &env_vars {
             cmd.env(key, value);
         }
@@ -608,7 +672,10 @@ impl ScriptService {
             cmd.current_dir(wd);
         }
 
-        // Set environment variables
+        // Set enhanced PATH for production builds (GUI apps don't inherit shell PATH)
+        cmd.env("PATH", get_enhanced_path());
+
+        // Set user-specified environment variables
         for (key, value) in &env_vars {
             cmd.env(key, value);
         }
