@@ -1,8 +1,8 @@
 'use client';
 
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect } from 'react';
 import { Play, Square, ChevronDown, ChevronUp, Clock, CheckCircle, XCircle, Loader2 } from 'lucide-react';
-import { Drawer, Button, Input, Badge } from '@/components/ui';
+import { Drawer, Button, Input, Badge, Terminal } from '@/components/ui';
 import {
   useScriptFlags,
   useScriptRun,
@@ -13,6 +13,7 @@ import {
   useEnvVars,
 } from '@/hooks';
 import { useToastStore } from '@/stores';
+import { trackScriptRun } from '@/stores/action-tracking-store';
 import type { Script, ScriptFlag, ScriptRunStatus } from '@/types';
 
 interface ScriptRunPanelProps {
@@ -37,7 +38,6 @@ export function ScriptRunPanel({ script, workspaceId, onClose }: ScriptRunPanelP
   const [selectedEnvKeys, setSelectedEnvKeys] = useState<string[]>([]);
   const [activeRunId, setActiveRunId] = useState<string | null>(null);
   const [showHistory, setShowHistory] = useState(false);
-  const logsEndRef = useRef<HTMLDivElement>(null);
 
   const { data: flags = [] } = useScriptFlags(script.id);
   const { data: runs = [] } = useScriptRuns(script.id);
@@ -64,6 +64,20 @@ export function ScriptRunPanel({ script, workspaceId, onClose }: ScriptRunPanelP
     }
   }, [activeRunId, currentRun, isRunning, refetchLogs]);
 
+  // Track script run completion for AI context
+  useEffect(() => {
+    if (currentRun && (currentRun.status === 'success' || currentRun.status === 'failed' || currentRun.status === 'cancelled')) {
+      trackScriptRun({
+        scriptName: script.name,
+        success: currentRun.status === 'success',
+        output: logs?.slice(0, 500),
+        error: currentRun.status === 'failed' ? 'Script execution failed' : undefined,
+        workspaceId,
+        scriptId: script.id,
+      });
+    }
+  }, [currentRun?.status, script.name, script.id, workspaceId, logs]);
+
   const startScript = useStartScriptAsync();
   const cancelScript = useCancelScriptRun();
   const { addToast } = useToastStore();
@@ -78,11 +92,6 @@ export function ScriptRunPanel({ script, workspaceId, onClose }: ScriptRunPanelP
     });
     setFlagValues((prev) => ({ ...defaults, ...prev }));
   }, [flags]);
-
-  // Auto-scroll logs
-  useEffect(() => {
-    logsEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [logs]);
 
   const handleRun = async () => {
     // Validate required flags
@@ -279,16 +288,22 @@ export function ScriptRunPanel({ script, workspaceId, onClose }: ScriptRunPanelP
         {activeRunId && (
           <div className="space-y-2">
             <h3 className="text-sm font-medium text-coco-text-primary">Output</h3>
-            <div className="bg-coco-bg-primary rounded-lg border border-coco-border-subtle p-4 font-mono text-xs max-h-[300px] overflow-y-auto">
-              {logs ? (
-                <pre className="whitespace-pre-wrap break-words text-coco-text-secondary">
-                  {logs}
-                </pre>
-              ) : (
-                <span className="text-coco-text-tertiary">Waiting for output...</span>
-              )}
-              <div ref={logsEndRef} />
-            </div>
+            <Terminal
+              lines={logs ? logs.split('\n') : []}
+              showToolbar
+              title={script.name}
+              status={
+                currentRun?.status === 'running' || currentRun?.status === 'pending'
+                  ? 'running'
+                  : currentRun?.status === 'success'
+                  ? 'success'
+                  : currentRun?.status === 'failed'
+                  ? 'error'
+                  : 'idle'
+              }
+              maxHeight="300px"
+              enableColors
+            />
           </div>
         )}
 

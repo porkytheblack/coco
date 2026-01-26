@@ -7,6 +7,7 @@ import { z } from 'zod';
 import { Button, Input, Modal } from '@/components/ui';
 import type { WalletWithBalance, Chain } from '@/types';
 import { sendTransaction } from '@/lib/wallet/transfer';
+import { trackWalletSend } from '@/stores/action-tracking-store';
 
 // Zod schema for send funds form
 const sendFundsSchema = z.object({
@@ -77,10 +78,36 @@ export function SendModal({
         chain,
       });
 
+      // Track successful wallet send for AI context
+      trackWalletSend({
+        walletName: wallet.name,
+        recipient: data.recipient.trim(),
+        amount: data.amount.trim(),
+        symbol: chain.nativeCurrency || 'ETH',
+        success: true,
+        txHash,
+        chainId: chain.id,
+        walletId: wallet.id,
+      });
+
       onSuccess(txHash);
       handleClose();
     } catch (err) {
-      setFormError('root', { message: (err as Error).message });
+      const errorMessage = (err as Error).message;
+
+      // Track failed wallet send for AI context
+      trackWalletSend({
+        walletName: wallet.name,
+        recipient: data.recipient.trim(),
+        amount: data.amount.trim(),
+        symbol: chain.nativeCurrency || 'ETH',
+        success: false,
+        error: errorMessage,
+        chainId: chain.id,
+        walletId: wallet.id,
+      });
+
+      setFormError('root', { message: errorMessage });
     }
   };
 

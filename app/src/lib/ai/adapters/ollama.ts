@@ -10,7 +10,7 @@ export class OllamaAdapter extends BaseAIAdapter {
   }
 
   async chat(messages: ChatMessage[], context?: AIContext): Promise<string> {
-    const systemPrompt = this.buildSystemPrompt(context);
+    const systemPrompt = this.buildSystemPrompt(context, context?.enableActions);
 
     const ollamaMessages = [
       { role: 'system', content: systemPrompt },

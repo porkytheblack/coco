@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import { Play, Settings, Trash2, Terminal, Hexagon, Code2, Flame, FileCode } from 'lucide-react';
+import { Play, Settings, Trash2, Terminal, Hexagon, Code2, Flame, FileCode, Anchor, Cpu } from 'lucide-react';
 import { Card, IconButton, Badge } from '@/components/ui';
 import type { Script, ScriptRunner } from '@/types';
 
@@ -13,15 +13,29 @@ interface ScriptCardProps {
 }
 
 const RUNNER_CONFIG: Record<ScriptRunner, { icon: typeof Terminal; label: string; color: string }> = {
+  // General runners
   bash: { icon: Terminal, label: 'Bash', color: 'text-green-500' },
   node: { icon: Hexagon, label: 'Node', color: 'text-yellow-500' },
   bun: { icon: Flame, label: 'Bun', color: 'text-orange-500' },
   python: { icon: Code2, label: 'Python', color: 'text-blue-500' },
+  npx: { icon: FileCode, label: 'npx', color: 'text-red-500' },
+  custom: { icon: Terminal, label: 'Custom', color: 'text-coco-text-secondary' },
+  // Foundry (EVM/Hedera)
   forge: { icon: Hexagon, label: 'Script', color: 'text-purple-500' },
   'forge-test': { icon: Hexagon, label: 'Test', color: 'text-purple-500' },
   'forge-build': { icon: Hexagon, label: 'Build', color: 'text-purple-500' },
-  npx: { icon: FileCode, label: 'npx', color: 'text-red-500' },
-  custom: { icon: Terminal, label: 'Custom', color: 'text-coco-text-secondary' },
+  // Hardhat (EVM/Hedera)
+  hardhat: { icon: Hexagon, label: 'Run', color: 'text-yellow-600' },
+  'hardhat-test': { icon: Hexagon, label: 'Test', color: 'text-yellow-600' },
+  'hardhat-compile': { icon: Hexagon, label: 'Compile', color: 'text-yellow-600' },
+  // Anchor (Solana)
+  anchor: { icon: Anchor, label: 'Run', color: 'text-violet-500' },
+  'anchor-test': { icon: Anchor, label: 'Test', color: 'text-violet-500' },
+  'anchor-build': { icon: Anchor, label: 'Build', color: 'text-violet-500' },
+  // Aptos Move
+  'aptos-move-compile': { icon: Cpu, label: 'Compile', color: 'text-teal-500' },
+  'aptos-move-test': { icon: Cpu, label: 'Test', color: 'text-teal-500' },
+  'aptos-move-publish': { icon: Cpu, label: 'Publish', color: 'text-teal-500' },
 };
 
 export function ScriptCard({ script, onRun, onEdit, onDelete }: ScriptCardProps) {

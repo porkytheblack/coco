@@ -10,7 +10,7 @@ export class AnthropicAdapter extends BaseAIAdapter {
   }
 
   async chat(messages: ChatMessage[], context?: AIContext): Promise<string> {
-    const systemPrompt = this.buildSystemPrompt(context);
+    const systemPrompt = this.buildSystemPrompt(context, context?.enableActions);
 
     const anthropicMessages = messages
       .filter((m) => m.role !== 'system')
@@ -30,6 +30,7 @@ export class AnthropicAdapter extends BaseAIAdapter {
       body: JSON.stringify({
         model: this.model,
         max_tokens: 16384,
+        temperature: 0.3,
         system: systemPrompt,
         messages: anthropicMessages,
       }),

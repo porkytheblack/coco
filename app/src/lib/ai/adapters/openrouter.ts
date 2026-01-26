@@ -10,7 +10,7 @@ export class OpenRouterAdapter extends BaseAIAdapter {
   }
 
   async chat(messages: ChatMessage[], context?: AIContext): Promise<string> {
-    const systemPrompt = this.buildSystemPrompt(context);
+    const systemPrompt = this.buildSystemPrompt(context, context?.enableActions);
 
     const openRouterMessages = [
       { role: 'system', content: systemPrompt },
@@ -29,6 +29,7 @@ export class OpenRouterAdapter extends BaseAIAdapter {
         model: this.model,
         messages: openRouterMessages,
         max_tokens: 16384,
+        temperature: 0.3,
       }),
     });
 

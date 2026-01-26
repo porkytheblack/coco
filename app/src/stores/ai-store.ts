@@ -125,7 +125,9 @@ export const useAIStore = create<AIState>()(
       name: 'coco-ai',
       partialize: (state) => ({
         settings: state.settings,
-        // Don't persist chat history
+        // Persist chat history (limit to last 100 messages to avoid storage issues)
+        chatHistory: state.chatHistory.slice(-100),
+        currentHistoryIndex: state.currentHistoryIndex,
       }),
     }
   )

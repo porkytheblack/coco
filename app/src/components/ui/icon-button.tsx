@@ -24,7 +24,7 @@ export const IconButton = forwardRef<HTMLButtonElement, IconButtonProps>(
         ref={ref}
         aria-label={label}
         className={clsx(
-          'w-9 h-9 flex items-center justify-center rounded-md',
+          'w-11 h-11 flex items-center justify-center rounded-lg',
           'bg-transparent hover:bg-coco-bg-tertiary',
           'transition-all duration-base',
           'focus:outline-none focus:ring-2 focus:ring-coco-accent focus:ring-offset-2',

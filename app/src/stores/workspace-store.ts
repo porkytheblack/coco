@@ -13,11 +13,20 @@ import type {
   MoveDefinition,
 } from '@/types';
 import * as tauri from '@/lib/tauri';
+import { trackTransactionExecution, trackContractOperation, trackScriptRun } from './action-tracking-store';
 import { getAdapter } from '@/lib/adapters';
 
 // Execution context for real blockchain transactions
 export interface ExecutionContext {
   chain: Chain;
+}
+
+// Recent workspace entry for tracking access history
+export interface RecentWorkspace {
+  workspaceId: string;
+  chainId: string;
+  name: string;
+  accessedAt: string;
 }
 
 interface WorkspaceState {
@@ -27,6 +36,7 @@ interface WorkspaceState {
   contracts: Contract[];
   transactions: Transaction[];
   transactionRuns: Record<string, TransactionRun[]>; // Map transactionId -> runs
+  recentWorkspaces: RecentWorkspace[]; // Recent workspaces across all chains
 
   // UI State
   isLoading: boolean;
@@ -49,11 +59,16 @@ interface WorkspaceState {
   updateTransactionArgs: (transactionId: string, args: Record<string, string>) => Promise<void>;
   executeTransaction: (transactionId: string, payload: Record<string, string>, walletId: string, context?: ExecutionContext) => Promise<TransactionRun>;
   deleteTransaction: (transactionId: string) => Promise<void>;
+  reorderTransactions: (fromIndex: number, toIndex: number) => void;
   getTransactionRuns: (transactionId: string) => TransactionRun[];
   loadTransactionRuns: (transactionId: string) => Promise<void>;
 
   selectTransaction: (transaction: Transaction | null) => void;
   clearWorkspace: () => void;
+
+  // Recent workspaces actions
+  loadRecentWorkspaces: () => Promise<void>;
+  addToRecentWorkspaces: (workspace: Workspace) => Promise<void>;
 }
 
 // Mock data
@@ -130,12 +145,16 @@ function parseContractFunctions(contract: Contract, ecosystem: 'evm' | 'solana' 
   return adapter.parseInterface(contract);
 }
 
+const MAX_RECENT_WORKSPACES = 6;
+const RECENT_WORKSPACES_KEY = 'recent_workspaces';
+
 export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
   workspaces: [],
   currentWorkspace: null,
   contracts: [],
   transactions: [],
   transactionRuns: {},
+  recentWorkspaces: [],
   isLoading: false,
   error: null,
   selectedTransaction: null,
@@ -178,6 +197,9 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
       }
 
       set({ currentWorkspace: workspace, isLoading: false });
+
+      // Track this workspace access
+      get().addToRecentWorkspaces(workspace);
 
       // Get the chain to determine ecosystem for contract parsing
       let ecosystem: 'evm' | 'solana' | 'aptos' = 'evm';
@@ -348,8 +370,22 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
 
     try {
       // Determine ecosystem from the current workspace's chain
-      // For now, default to 'evm' - in real implementation, get from chain store
-      const ecosystem = 'evm' as const;
+      let ecosystem: 'evm' | 'solana' | 'aptos' = 'evm';
+      if (tauri.checkIsTauri()) {
+        try {
+          const chain = await tauri.getChain(currentWorkspace.chainId);
+          ecosystem = chain.ecosystem || 'evm';
+        } catch (err) {
+          console.warn('Failed to get chain for ecosystem detection:', err);
+          // Fallback: infer from interfaceType
+          if (request.interfaceType === 'move') ecosystem = 'aptos';
+          else if (request.interfaceType === 'idl') ecosystem = 'solana';
+        }
+      } else {
+        // Fallback: infer from interfaceType for non-Tauri dev
+        if (request.interfaceType === 'move') ecosystem = 'aptos';
+        else if (request.interfaceType === 'idl') ecosystem = 'solana';
+      }
 
       let contract: Contract;
 
@@ -399,6 +435,15 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
       set((state) => ({
         contracts: [...state.contracts, contract],
       }));
+
+      // Track the contract addition for AI context
+      trackContractOperation({
+        operation: 'add',
+        contractName: contract.name,
+        interfaceType: contract.interfaceType,
+        workspaceId: currentWorkspace.id,
+        contractId: contract.id,
+      });
     } catch (error) {
       console.error('Failed to add contract:', error);
       throw error;
@@ -406,6 +451,8 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
   },
 
   deleteContract: async (contractId: string) => {
+    const contract = get().contracts.find((c) => c.id === contractId);
+    const workspaceId = get().currentWorkspace?.id;
     try {
       if (tauri.checkIsTauri()) {
         await tauri.deleteContract(contractId);
@@ -413,6 +460,17 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
       set((state) => ({
         contracts: state.contracts.filter((c) => c.id !== contractId),
       }));
+
+      // Track the contract deletion for AI context
+      if (contract) {
+        trackContractOperation({
+          operation: 'delete',
+          contractName: contract.name,
+          interfaceType: contract.interfaceType,
+          workspaceId,
+          contractId,
+        });
+      }
     } catch (error) {
       console.error('Failed to delete contract:', error);
       throw error;
@@ -473,6 +531,15 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
       set((state) => ({
         contracts: state.contracts.map((c) => (c.id === request.contractId ? contract : c)),
       }));
+
+      // Track the contract update for AI context
+      trackContractOperation({
+        operation: 'update',
+        contractName: contract.name,
+        interfaceType: contract.interfaceType,
+        workspaceId: get().currentWorkspace?.id,
+        contractId: contract.id,
+      });
 
       return contract;
     } catch (error) {
@@ -823,6 +890,20 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
           : state.selectedTransaction,
       }));
 
+      // Track the transaction execution for AI context
+      trackTransactionExecution({
+        transactionName: transaction.name || 'Unnamed Transaction',
+        functionName: transaction.functionName || 'unknown',
+        contractName: transaction.contract?.name,
+        success: result.status === 'success',
+        txHash: result.txHash,
+        error: result.errorMessage,
+        workspaceId: currentWorkspace.id,
+        chainId: currentWorkspace.chainId,
+        transactionId,
+        contractId: transaction.contractId,
+      });
+
       return result;
     } catch (error) {
       console.error('Failed to execute transaction:', error);
@@ -866,6 +947,15 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
     }
   },
 
+  reorderTransactions: (fromIndex: number, toIndex: number) => {
+    set((state) => {
+      const newTransactions = [...state.transactions];
+      const [removed] = newTransactions.splice(fromIndex, 1);
+      newTransactions.splice(toIndex, 0, removed);
+      return { transactions: newTransactions };
+    });
+  },
+
   selectTransaction: (transaction: Transaction | null) => {
     set({ selectedTransaction: transaction });
     // Load transaction runs when selecting a transaction
@@ -882,5 +972,45 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
       transactionRuns: {},
       selectedTransaction: null,
     });
+  },
+
+  loadRecentWorkspaces: async () => {
+    try {
+      if (tauri.checkIsTauri()) {
+        const stored = await tauri.getPreference(RECENT_WORKSPACES_KEY);
+        if (stored && Array.isArray(stored)) {
+          set({ recentWorkspaces: stored as RecentWorkspace[] });
+        }
+      }
+    } catch (error) {
+      console.error('Failed to load recent workspaces:', error);
+    }
+  },
+
+  addToRecentWorkspaces: async (workspace: Workspace) => {
+    try {
+      const { recentWorkspaces } = get();
+
+      // Create new entry
+      const entry: RecentWorkspace = {
+        workspaceId: workspace.id,
+        chainId: workspace.chainId,
+        name: workspace.name,
+        accessedAt: new Date().toISOString(),
+      };
+
+      // Remove existing entry for this workspace (if any) and add new one at front
+      const filtered = recentWorkspaces.filter(w => w.workspaceId !== workspace.id);
+      const updated = [entry, ...filtered].slice(0, MAX_RECENT_WORKSPACES);
+
+      set({ recentWorkspaces: updated });
+
+      // Persist to preferences
+      if (tauri.checkIsTauri()) {
+        await tauri.setPreference(RECENT_WORKSPACES_KEY, updated);
+      }
+    } catch (error) {
+      console.error('Failed to add to recent workspaces:', error);
+    }
   },
 }));

@@ -464,15 +464,29 @@ pub struct Network {
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "kebab-case")]
 pub enum ScriptRunner {
+    // General runners
     Bash,
     Node,
     Bun,
     Python,
-    Forge,       // forge script (for deployment scripts)
-    ForgeTest,   // forge test
-    ForgeBuild,  // forge build
     Npx,
     Custom,
+    // EVM/Hedera - Foundry (forge)
+    Forge,          // forge script (for deployment scripts)
+    ForgeTest,      // forge test
+    ForgeBuild,     // forge build
+    // EVM/Hedera - Hardhat
+    Hardhat,        // npx hardhat run
+    HardhatTest,    // npx hardhat test
+    HardhatCompile, // npx hardhat compile
+    // Solana - Anchor
+    Anchor,         // anchor run
+    AnchorTest,     // anchor test
+    AnchorBuild,    // anchor build
+    // Aptos - Move
+    AptosMoveCompile, // aptos move compile
+    AptosMoveTest,    // aptos move test
+    AptosMovePublish, // aptos move publish
 }
 
 impl Default for ScriptRunner {
@@ -483,15 +497,28 @@ impl Default for ScriptRunner {
 
 impl From<&str> for ScriptRunner {
     fn from(s: &str) -> Self {
-        match s.to_lowercase().as_str() {
+        match s.to_lowercase().replace('_', "-").as_str() {
             "node" => ScriptRunner::Node,
             "bun" => ScriptRunner::Bun,
             "python" => ScriptRunner::Python,
+            "npx" => ScriptRunner::Npx,
+            "custom" => ScriptRunner::Custom,
+            // Foundry
             "forge" | "forge-script" => ScriptRunner::Forge,
             "forge-test" | "forgetest" => ScriptRunner::ForgeTest,
             "forge-build" | "forgebuild" => ScriptRunner::ForgeBuild,
-            "npx" => ScriptRunner::Npx,
-            "custom" => ScriptRunner::Custom,
+            // Hardhat
+            "hardhat" | "hardhat-run" => ScriptRunner::Hardhat,
+            "hardhat-test" | "hardhattest" => ScriptRunner::HardhatTest,
+            "hardhat-compile" | "hardhatcompile" => ScriptRunner::HardhatCompile,
+            // Anchor
+            "anchor" | "anchor-run" => ScriptRunner::Anchor,
+            "anchor-test" | "anchortest" => ScriptRunner::AnchorTest,
+            "anchor-build" | "anchorbuild" => ScriptRunner::AnchorBuild,
+            // Aptos Move
+            "aptos-move-compile" | "aptosmovecompile" => ScriptRunner::AptosMoveCompile,
+            "aptos-move-test" | "aptosmovetest" => ScriptRunner::AptosMoveTest,
+            "aptos-move-publish" | "aptosmovepublish" => ScriptRunner::AptosMovePublish,
             _ => ScriptRunner::Bash,
         }
     }
@@ -504,11 +531,20 @@ impl std::fmt::Display for ScriptRunner {
             ScriptRunner::Node => write!(f, "node"),
             ScriptRunner::Bun => write!(f, "bun"),
             ScriptRunner::Python => write!(f, "python"),
+            ScriptRunner::Npx => write!(f, "npx"),
+            ScriptRunner::Custom => write!(f, "custom"),
             ScriptRunner::Forge => write!(f, "forge"),
             ScriptRunner::ForgeTest => write!(f, "forge-test"),
             ScriptRunner::ForgeBuild => write!(f, "forge-build"),
-            ScriptRunner::Npx => write!(f, "npx"),
-            ScriptRunner::Custom => write!(f, "custom"),
+            ScriptRunner::Hardhat => write!(f, "hardhat"),
+            ScriptRunner::HardhatTest => write!(f, "hardhat-test"),
+            ScriptRunner::HardhatCompile => write!(f, "hardhat-compile"),
+            ScriptRunner::Anchor => write!(f, "anchor"),
+            ScriptRunner::AnchorTest => write!(f, "anchor-test"),
+            ScriptRunner::AnchorBuild => write!(f, "anchor-build"),
+            ScriptRunner::AptosMoveCompile => write!(f, "aptos-move-compile"),
+            ScriptRunner::AptosMoveTest => write!(f, "aptos-move-test"),
+            ScriptRunner::AptosMovePublish => write!(f, "aptos-move-publish"),
         }
     }
 }

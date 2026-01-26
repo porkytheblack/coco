@@ -1,23 +1,27 @@
 'use client';
 
-import { useState, useMemo } from 'react';
-import { 
-  Play, 
-  CheckCircle, 
-  XCircle, 
-  Clock, 
-  ChevronRight, 
+import { useState, useMemo, useEffect, useCallback } from 'react';
+import {
+  Play,
+  CheckCircle,
+  XCircle,
+  Clock,
+  ChevronRight,
   ChevronDown,
   Activity,
   RefreshCw,
   Bug,
-  FileJson
+  FileJson,
+  Loader2,
+  Code
 } from 'lucide-react';
 import { useQueryClient } from '@tanstack/react-query';
 import { useWorkflowRuns, useWorkflow } from '@/hooks/use-workflows';
 import { queryKeys } from '@/lib/react-query';
 import type { WorkflowStepLog, WorkflowRunStatus } from '@/lib/workflow/types';
+import { workflowEvents } from '@/lib/workflow/events';
 import { clsx } from 'clsx';
+import { Terminal } from '@/components/ui';
 
 interface WorkflowRunsPanelProps {
   workflowId: string;
@@ -40,14 +44,51 @@ export function WorkflowRunsPanel({ workflowId, onRunSelect }: WorkflowRunsPanel
   const queryClient = useQueryClient();
   const [selectedRunId, setSelectedRunId] = useState<string | null>(null);
   const [showDebug, setShowDebug] = useState(false);
+  const [liveStepLogs, setLiveStepLogs] = useState<WorkflowStepLog[]>([]);
+  const [isLiveExecution, setIsLiveExecution] = useState(false);
   const { data: runsData = [], isLoading, refetch } = useWorkflowRuns(workflowId, true); // Polling enabled
   const { data: workflow } = useWorkflow(showDebug ? workflowId : undefined); // Fetch workflow only in debug
 
-  const handleRefresh = () => {
+  // Subscribe to live execution events
+  useEffect(() => {
+    const handleRunStart = () => {
+      setIsLiveExecution(true);
+      setLiveStepLogs([]);
+    };
+
+    const handleLogsUpdate = (logs: WorkflowStepLog[]) => {
+      setLiveStepLogs(logs);
+    };
+
+    const handleRunComplete = () => {
+      setIsLiveExecution(false);
+      // Refetch to get the final data from backend
+      setTimeout(() => refetch(), 500);
+    };
+
+    const handleRunError = () => {
+      setIsLiveExecution(false);
+      setTimeout(() => refetch(), 500);
+    };
+
+    workflowEvents.on('run:start', handleRunStart);
+    workflowEvents.on('logs:update', handleLogsUpdate);
+    workflowEvents.on('run:complete', handleRunComplete);
+    workflowEvents.on('run:error', handleRunError);
+
+    return () => {
+      workflowEvents.off('run:start', handleRunStart);
+      workflowEvents.off('logs:update', handleLogsUpdate);
+      workflowEvents.off('run:complete', handleRunComplete);
+      workflowEvents.off('run:error', handleRunError);
+    };
+  }, [refetch]);
+
+  const handleRefresh = useCallback(() => {
     refetch();
     // Also invalidate to be sure
     queryClient.invalidateQueries({ queryKey: queryKeys.workflowRuns(workflowId) });
-  };
+  }, [refetch, queryClient, workflowId]);
 
   // Parse runs data
   const runs = useMemo(() => {
@@ -75,7 +116,14 @@ export function WorkflowRunsPanel({ workflowId, onRunSelect }: WorkflowRunsPanel
     }).sort((a, b) => new Date(b.startedAt).getTime() - new Date(a.startedAt).getTime());
   }, [runsData]);
 
-  const selectedRun = selectedRunId ? runs.find(r => r.id === selectedRunId) : runs[0];
+  // For selected run, use live logs if execution is in progress
+  const selectedRun = useMemo(() => {
+    const run = selectedRunId ? runs.find(r => r.id === selectedRunId) : runs[0];
+    if (isLiveExecution && run && run.status === 'running' && liveStepLogs.length > 0) {
+      return { ...run, stepLogs: liveStepLogs };
+    }
+    return run;
+  }, [runs, selectedRunId, isLiveExecution, liveStepLogs]);
 
   // Helper for date formatting
   const formatTime = (dateStr: string) => {
@@ -123,21 +171,33 @@ export function WorkflowRunsPanel({ workflowId, onRunSelect }: WorkflowRunsPanel
       {/* Runs List */}
       <div className="w-64 border-r border-coco-border-subtle overflow-y-auto">
         <div className="p-2 sticky top-0 bg-coco-bg-elevated border-b border-coco-border-subtle flex items-center justify-between">
-          <h3 className="text-xs font-semibold text-coco-text-secondary uppercase tracking-wider">
-            Execution History
-          </h3>
+          <div className="flex items-center gap-2">
+            <h3 className="text-xs font-semibold text-coco-text-secondary uppercase tracking-wider">
+              Execution History
+            </h3>
+            {isLiveExecution && (
+              <span className="flex items-center gap-1 px-1.5 py-0.5 bg-emerald-500/20 text-emerald-400 text-[10px] font-semibold rounded animate-pulse">
+                <span className="w-1.5 h-1.5 bg-emerald-400 rounded-full" />
+                LIVE
+              </span>
+            )}
+          </div>
           <div className="flex items-center gap-1">
-            <button 
+            <button
                 onClick={() => setShowDebug(!showDebug)}
                 className={`p-1 rounded transition-colors ${showDebug ? 'text-coco-accent bg-coco-bg-tertiary' : 'text-coco-text-tertiary hover:text-coco-text-primary'}`}
                 title="Toggle Debug View"
             >
                 <Bug className="w-3 h-3" />
             </button>
-            <button 
+            <button
                 onClick={handleRefresh}
-                className="p-1 hover:bg-coco-bg-tertiary rounded text-coco-text-tertiary hover:text-coco-text-primary transition-colors"
+                className={clsx(
+                  "p-1 hover:bg-coco-bg-tertiary rounded text-coco-text-tertiary hover:text-coco-text-primary transition-colors",
+                  isLiveExecution && "animate-spin"
+                )}
                 title="Refresh runs"
+                disabled={isLiveExecution}
             >
                 <RefreshCw className="w-3 h-3" />
             </button>
@@ -264,6 +324,31 @@ export function WorkflowRunsPanel({ workflowId, onRunSelect }: WorkflowRunsPanel
 function StepLogItem({ log }: { log: WorkflowStepLog }) {
   const [isOpen, setIsOpen] = useState(false);
 
+  // Check if this is a script node with output logs
+  const isScriptNode = log.nodeType === 'script';
+  const scriptOutput = isScriptNode && log.output
+    ? (typeof log.output === 'object' && log.output !== null)
+      ? (log.output as { output?: string }).output || ''
+      : ''
+    : '';
+
+  // Get extracted values from script output for display
+  const extractedValues: Record<string, string> | null = useMemo(() => {
+    if (!isScriptNode || !log.output || typeof log.output !== 'object') return null;
+    const output = log.output as Record<string, unknown>;
+    const extracted: Record<string, string> = {};
+    for (const [key, value] of Object.entries(output)) {
+      if (key !== 'is_success' && key !== 'output' && key !== 'error') {
+        extracted[key] = value === null || value === undefined
+          ? 'null'
+          : typeof value === 'object'
+          ? JSON.stringify(value)
+          : String(value);
+      }
+    }
+    return Object.keys(extracted).length > 0 ? extracted : null;
+  }, [isScriptNode, log.output]);
+
   return (
     <div className="border border-coco-border-subtle rounded-lg bg-coco-bg-primary overflow-hidden">
       <button
@@ -281,6 +366,11 @@ function StepLogItem({ log }: { log: WorkflowStepLog }) {
           </span>
         </div>
         <div className="flex items-center gap-3">
+          {isScriptNode && scriptOutput && (
+            <span title="Has script logs">
+              <Code className="w-3 h-3 text-green-400" />
+            </span>
+          )}
           {log.error && <span className="text-xs text-rose-400">Failed</span>}
         </div>
       </button>
@@ -295,7 +385,7 @@ function StepLogItem({ log }: { log: WorkflowStepLog }) {
               </pre>
             </div>
           )}
-          
+
           {!!log.input && (
             <div>
               <span className="text-xs font-semibold text-coco-text-secondary block mb-1">Input</span>
@@ -305,7 +395,29 @@ function StepLogItem({ log }: { log: WorkflowStepLog }) {
             </div>
           )}
 
-          {!!log.output && (
+          {/* Script Terminal Output */}
+          {isScriptNode && scriptOutput && (
+            <div>
+              <span className="text-xs font-semibold text-coco-text-secondary block mb-1 flex items-center gap-1.5">
+                <Code className="w-3 h-3 text-green-400" />
+                Script Logs
+              </span>
+              <Terminal
+                lines={scriptOutput.split('\n')}
+                showToolbar
+                title={log.nodeName || 'Script Output'}
+                status={log.status === 'completed' ? 'success' : log.status === 'failed' ? 'error' : 'idle'}
+                maxHeight="200px"
+                enableColors
+              />
+            </div>
+          )}
+
+          {/* Extracted Values */}
+          {extractedValues !== null && <ExtractedValuesDisplay values={extractedValues} />}
+
+          {/* Non-script output */}
+          {!!log.output && !isScriptNode && (
             <div>
               <span className="text-xs font-semibold text-coco-text-secondary block mb-1">Output</span>
               <pre className="text-xs bg-coco-bg-primary p-2 rounded text-coco-text-primary overflow-x-auto">
@@ -313,8 +425,42 @@ function StepLogItem({ log }: { log: WorkflowStepLog }) {
               </pre>
             </div>
           )}
+
+          {/* Script success status */}
+          {isScriptNode && !!log.output && typeof log.output === 'object' && (
+            <div className="flex items-center gap-2 text-xs">
+              <span className="text-coco-text-tertiary">Status:</span>
+              {(log.output as { is_success?: boolean }).is_success ? (
+                <span className="text-emerald-400 flex items-center gap-1">
+                  <CheckCircle className="w-3 h-3" />
+                  Success
+                </span>
+              ) : (
+                <span className="text-rose-400 flex items-center gap-1">
+                  <XCircle className="w-3 h-3" />
+                  Failed
+                </span>
+              )}
+            </div>
+          )}
         </div>
       )}
+    </div>
+  );
+}
+
+function ExtractedValuesDisplay({ values }: { values: Record<string, string> }) {
+  return (
+    <div>
+      <span className="text-xs font-semibold text-emerald-400 block mb-1">Extracted Values</span>
+      <div className="grid gap-1">
+        {Object.entries(values).map(([key, val]) => (
+          <div key={key} className="flex items-center gap-2 text-xs bg-emerald-500/10 px-2 py-1 rounded">
+            <span className="font-mono text-emerald-300">{key}:</span>
+            <span className="text-coco-text-primary font-mono truncate">{val}</span>
+          </div>
+        ))}
+      </div>
     </div>
   );
 }

@@ -11,6 +11,7 @@ const iconPaths: Record<string, string> = {
   optimism: '/chain-icons/optimism.png',
   avalanche: '/chain-icons/avalanche.png',
   bnb: '/chain-icons/bnb.png',
+  hedera: '/chain-icons/hedera.png',
   solana: '/chain-icons/solana.png',
   aptos: '/chain-icons/aptos.png',
 };

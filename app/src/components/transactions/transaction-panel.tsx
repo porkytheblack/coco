@@ -1,13 +1,14 @@
 'use client';
 
 import { useState, useEffect, useRef, useCallback } from 'react';
-import { Play, Loader2, CheckCircle, XCircle, Copy, ExternalLink, Clock, ChevronDown, ChevronRight, Trash2 } from 'lucide-react';
+import { Play, Loader2, CheckCircle, XCircle, Copy, ExternalLink, Clock, ChevronDown, ChevronRight, Trash2, Pencil, Check, X, RotateCcw } from 'lucide-react';
 import { clsx } from 'clsx';
 import { Button } from '@/components/ui';
 import { ErrorExplanation } from '@/components/ai';
 import { useToastStore, useWorkspaceStore } from '@/stores';
 import type { Transaction, TransactionRun, WalletWithBalance, TxStatus, Ecosystem, AccountRequirement, PdaSeed } from '@/types';
 import { truncateAddress, truncateHash, formatBalance } from '@/lib/utils/format';
+import { updateTransaction } from '@/lib/tauri/commands';
 
 interface TransactionPanelProps {
   transaction: Transaction;
@@ -88,6 +89,9 @@ export function TransactionPanel({
   const [isDeleting, setIsDeleting] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [isEditingName, setIsEditingName] = useState(false);
+  const [editedName, setEditedName] = useState(transaction.name || '');
+  const [isSavingName, setIsSavingName] = useState(false);
   const [isParamsExpanded, setIsParamsExpanded] = useState(true);
   const [expandedRuns, setExpandedRuns] = useState<Set<string>>(new Set());
   const addToast = useToastStore((state) => state.addToast);
@@ -213,6 +217,42 @@ export function TransactionPanel({
     }
   };
 
+  const handleSaveName = async () => {
+    if (!editedName.trim() || editedName === transaction.name) {
+      setIsEditingName(false);
+      return;
+    }
+
+    setIsSavingName(true);
+    try {
+      await updateTransaction(transaction.id, { name: editedName.trim() });
+      addToast({
+        type: 'success',
+        title: 'Transaction updated',
+        message: `Renamed to "${editedName.trim()}"`,
+      });
+      setIsEditingName(false);
+    } catch (err) {
+      addToast({
+        type: 'error',
+        title: 'Update failed',
+        message: (err as Error).message,
+      });
+    } finally {
+      setIsSavingName(false);
+    }
+  };
+
+  const handleCancelEditName = () => {
+    setEditedName(transaction.name || '');
+    setIsEditingName(false);
+  };
+
+  // Update editedName when transaction changes
+  useEffect(() => {
+    setEditedName(transaction.name || '');
+  }, [transaction.name]);
+
   const toggleRunExpanded = (runId: string) => {
     setExpandedRuns((prev) => {
       const next = new Set(prev);
@@ -223,6 +263,61 @@ export function TransactionPanel({
       }
       return next;
     });
+  };
+
+  // Rerun a previous execution with the same payload
+  const handleRerun = async (run: TransactionRun) => {
+    if (!run.payload || isExecuting) return;
+
+    // Use the currently selected wallet for rerun
+    if (!selectedWalletId) {
+      setError('Please select a wallet');
+      addToast({
+        type: 'error',
+        title: 'Wallet required',
+        message: 'Please select a wallet to rerun the transaction',
+      });
+      return;
+    }
+
+    setIsExecuting(true);
+    setError(null);
+
+    try {
+      // Convert payload to Record<string, string> (stringify non-string values)
+      const stringPayload: Record<string, string> = {};
+      for (const [key, value] of Object.entries(run.payload)) {
+        stringPayload[key] = typeof value === 'string' ? value : JSON.stringify(value);
+      }
+
+      const result = await onExecute(stringPayload, selectedWalletId);
+
+      if (result.status === 'success') {
+        addToast({
+          type: 'success',
+          title: 'Transaction rerun successful',
+          message: result.txHash ? `TX: ${truncateHash(result.txHash)}` : 'Transaction completed successfully',
+        });
+        setExpandedRuns((prev) => new Set([...prev, result.id]));
+      } else if (result.status === 'failed') {
+        addToast({
+          type: 'error',
+          title: 'Transaction rerun failed',
+          message: result.errorMessage || 'Transaction execution failed',
+        });
+        setExpandedRuns((prev) => new Set([...prev, result.id]));
+      }
+    } catch (err) {
+      const errorMessage = (err as Error).message;
+      setError(errorMessage);
+      addToast({
+        type: 'error',
+        title: 'Rerun error',
+        message: errorMessage,
+      });
+    } finally {
+      setIsExecuting(false);
+    }
   };
 
   const getStatusIcon = (status: TxStatus) => {
@@ -259,10 +354,55 @@ export function TransactionPanel({
     <div className="space-y-6">
       {/* Header */}
       <div className="flex items-start justify-between">
-        <div>
-          <h2 className="text-lg font-semibold text-coco-text-primary">
-            {transaction.name || 'Transaction'}
-          </h2>
+        <div className="flex-1 min-w-0">
+          {isEditingName ? (
+            <div className="flex items-center gap-2">
+              <input
+                type="text"
+                value={editedName}
+                onChange={(e) => setEditedName(e.target.value)}
+                className="flex-1 px-2 py-1 text-lg font-semibold bg-coco-bg-primary border border-coco-border-default rounded-md focus:outline-none focus:ring-2 focus:ring-coco-accent"
+                autoFocus
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') handleSaveName();
+                  if (e.key === 'Escape') handleCancelEditName();
+                }}
+              />
+              <button
+                onClick={handleSaveName}
+                disabled={isSavingName}
+                className="p-1.5 text-coco-success hover:bg-coco-success/10 rounded-md transition-colors disabled:opacity-50"
+                title="Save"
+              >
+                {isSavingName ? (
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                ) : (
+                  <Check className="w-4 h-4" />
+                )}
+              </button>
+              <button
+                onClick={handleCancelEditName}
+                disabled={isSavingName}
+                className="p-1.5 text-coco-text-tertiary hover:text-coco-error hover:bg-coco-error/10 rounded-md transition-colors"
+                title="Cancel"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+          ) : (
+            <div className="flex items-center gap-2 group">
+              <h2 className="text-lg font-semibold text-coco-text-primary truncate">
+                {transaction.name || 'Transaction'}
+              </h2>
+              <button
+                onClick={() => setIsEditingName(true)}
+                className="p-1 text-coco-text-tertiary hover:text-coco-accent opacity-0 group-hover:opacity-100 transition-opacity"
+                title="Edit name"
+              >
+                <Pencil className="w-3.5 h-3.5" />
+              </button>
+            </div>
+          )}
           {transaction.contract && (
             <p className="text-sm text-coco-text-tertiary mt-1">
               Contract: {transaction.contract.name}
@@ -597,10 +737,17 @@ export function TransactionPanel({
                   className="bg-coco-bg-primary border border-coco-border-subtle rounded-lg overflow-hidden"
                 >
                   {/* Collapsed Header - Always visible */}
-                  <button
-                    type="button"
+                  <div
+                    role="button"
+                    tabIndex={0}
                     onClick={() => toggleRunExpanded(run.id)}
-                    className="w-full flex items-center justify-between p-3 text-left hover:bg-coco-bg-tertiary/30 transition-colors"
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter' || e.key === ' ') {
+                        e.preventDefault();
+                        toggleRunExpanded(run.id);
+                      }
+                    }}
+                    className="w-full flex items-center justify-between p-3 text-left hover:bg-coco-bg-tertiary/30 transition-colors cursor-pointer"
                   >
                     <div className="flex items-center gap-3 min-w-0 flex-1">
                       {getStatusIcon(run.status)}
@@ -629,13 +776,26 @@ export function TransactionPanel({
                       <span className="text-xs text-coco-text-tertiary">
                         {formatShortDate(run.startedAt)}
                       </span>
+                      {run.payload && Object.keys(run.payload).length > 0 && (
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleRerun(run);
+                          }}
+                          disabled={isExecuting}
+                          className="p-1.5 text-coco-text-tertiary hover:text-coco-accent hover:bg-coco-accent/10 rounded transition-colors disabled:opacity-50"
+                          title="Rerun with same arguments"
+                        >
+                          <RotateCcw className="w-3.5 h-3.5" />
+                        </button>
+                      )}
                       {isExpanded ? (
                         <ChevronDown className="w-4 h-4 text-coco-text-tertiary" />
                       ) : (
                         <ChevronRight className="w-4 h-4 text-coco-text-tertiary" />
                       )}
                     </div>
-                  </button>
+                  </div>
 
                   {/* Expanded Details */}
                   {isExpanded && (

@@ -90,8 +90,34 @@ const NODE_TEMPLATES: NodeTemplate[] = [
 
 export function WorkflowToolbar({ onAddNode, isCollapsed = false, onToggle }: WorkflowToolbarProps) {
   const onDragStart = (event: React.DragEvent, nodeType: WorkflowNodeType) => {
+    console.log('[Toolbar] Drag started for:', nodeType);
+
+    // Set the drag data
     event.dataTransfer.setData('application/reactflow', nodeType);
+    event.dataTransfer.setData('text/plain', nodeType); // Fallback
     event.dataTransfer.effectAllowed = 'move';
+
+    // Create a custom drag image for better visual feedback
+    const dragEl = event.currentTarget as HTMLElement;
+    if (dragEl) {
+      // Clone the element for drag image
+      const clone = dragEl.cloneNode(true) as HTMLElement;
+      clone.style.position = 'absolute';
+      clone.style.top = '-1000px';
+      clone.style.left = '-1000px';
+      clone.style.width = `${dragEl.offsetWidth}px`;
+      clone.style.opacity = '0.8';
+      document.body.appendChild(clone);
+      event.dataTransfer.setDragImage(clone, dragEl.offsetWidth / 2, 20);
+      // Clean up the clone after a short delay
+      setTimeout(() => clone.remove(), 0);
+    }
+
+    console.log('[Toolbar] Data set, effectAllowed:', event.dataTransfer.effectAllowed);
+  };
+
+  const onDragEnd = (event: React.DragEvent, nodeType: WorkflowNodeType) => {
+    console.log('[Toolbar] Drag ended for:', nodeType, 'dropEffect:', event.dataTransfer.dropEffect);
   };
 
   const categories = [
@@ -136,13 +162,16 @@ export function WorkflowToolbar({ onAddNode, isCollapsed = false, onToggle }: Wo
               </h4>
               <div className="space-y-1">
                 {nodes.map(template => (
-                  <button
+                  <div
                     key={template.type}
-                    draggable
+                    draggable={true}
                     onDragStart={(event) => onDragStart(event, template.type)}
+                    onDragEnd={(event) => onDragEnd(event, template.type)}
                     onClick={() => onAddNode(template.type)}
-                    className={`w-full flex items-center gap-3 px-3 py-2 rounded-lg text-left hover:bg-coco-bg-tertiary transition-colors group ${isCollapsed ? 'justify-center px-2' : ''}`}
+                    className={`w-full flex items-center gap-3 px-3 py-2 rounded-lg text-left hover:bg-coco-bg-tertiary transition-colors group cursor-grab active:cursor-grabbing ${isCollapsed ? 'justify-center px-2' : ''}`}
                     title={template.description}
+                    role="button"
+                    tabIndex={0}
                   >
                     <div className={`
                       p-1.5 rounded-md
@@ -167,7 +196,7 @@ export function WorkflowToolbar({ onAddNode, isCollapsed = false, onToggle }: Wo
                         </p>
                       </div>
                     )}
-                  </button>
+                  </div>
                 ))}
               </div>
             </div>

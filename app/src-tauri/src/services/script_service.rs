@@ -77,11 +77,12 @@ impl ScriptService {
         let runner = input.runner.as_deref().map(ScriptRunner::from).unwrap_or_default();
 
         // Only validate file path for runners that require a specific file
-        // forge-test, forge-build, and custom runners don't need a file path
+        // Build/test/compile runners don't need a file path
         let requires_file = matches!(
             runner,
             ScriptRunner::Bash | ScriptRunner::Node | ScriptRunner::Bun |
-            ScriptRunner::Python | ScriptRunner::Forge | ScriptRunner::Npx
+            ScriptRunner::Python | ScriptRunner::Forge | ScriptRunner::Npx |
+            ScriptRunner::Hardhat | ScriptRunner::Anchor
         );
 
         if requires_file && !input.file_path.is_empty() && input.file_path != "." {
@@ -909,6 +910,15 @@ fn build_command(script: &Script, flags: &HashMap<String, String>) -> Command {
         }
     }
 
+    // Parse additional args from command field (for runners that support it)
+    let extra_args: Vec<String> = script
+        .command
+        .as_deref()
+        .unwrap_or("")
+        .split_whitespace()
+        .map(|s| s.to_string())
+        .collect();
+
     match script.runner {
         ScriptRunner::Bash => {
             let mut cmd = Command::new("sh");
@@ -943,40 +953,8 @@ fn build_command(script: &Script, flags: &HashMap<String, String>) -> Command {
             }
             cmd
         }
-        ScriptRunner::Forge => {
-            // forge script <path> [args]
-            let mut cmd = Command::new("forge");
-            cmd.arg("script").arg(&script.file_path);
-            for arg in args {
-                cmd.arg(arg);
-            }
-            cmd
-        }
-        ScriptRunner::ForgeTest => {
-            // forge test [args] - file_path can be empty or a test filter
-            let mut cmd = Command::new("forge");
-            cmd.arg("test");
-            // If file_path is specified and not empty/dot, use it as a match filter
-            if !script.file_path.is_empty() && script.file_path != "." {
-                cmd.arg("--match-path").arg(&script.file_path);
-            }
-            for arg in args {
-                cmd.arg(arg);
-            }
-            cmd
-        }
-        ScriptRunner::ForgeBuild => {
-            // forge build [args] - file_path is typically not used
-            let mut cmd = Command::new("forge");
-            cmd.arg("build");
-            for arg in args {
-                cmd.arg(arg);
-            }
-            cmd
-        }
         ScriptRunner::Npx => {
             let mut cmd = Command::new("npx");
-            // For npx, the file_path is the package name or script
             cmd.arg(&script.file_path);
             for arg in args {
                 cmd.arg(arg);
@@ -984,12 +962,9 @@ fn build_command(script: &Script, flags: &HashMap<String, String>) -> Command {
             cmd
         }
         ScriptRunner::Custom => {
-            // For custom runner, use the command field as the full command
-            // file_path can be appended as an argument if needed
             let base_cmd = script.command.as_deref().unwrap_or("sh");
             let mut cmd = Command::new("sh");
             let mut cmd_str = base_cmd.to_string();
-            // Only append file_path if it's not empty
             if !script.file_path.is_empty() && script.file_path != "." {
                 cmd_str.push_str(&format!(" {}", script.file_path));
             }
@@ -997,6 +972,165 @@ fn build_command(script: &Script, flags: &HashMap<String, String>) -> Command {
                 cmd_str.push_str(&format!(" {}", arg));
             }
             cmd.arg("-c").arg(cmd_str);
+            cmd
+        }
+        // =====================
+        // Foundry (EVM/Hedera)
+        // =====================
+        ScriptRunner::Forge => {
+            let mut cmd = Command::new("forge");
+            cmd.arg("script").arg(&script.file_path);
+            for arg in &extra_args {
+                cmd.arg(arg);
+            }
+            for arg in args {
+                cmd.arg(arg);
+            }
+            cmd
+        }
+        ScriptRunner::ForgeTest => {
+            let mut cmd = Command::new("forge");
+            cmd.arg("test");
+            if !script.file_path.is_empty() && script.file_path != "." {
+                cmd.arg("--match-path").arg(&script.file_path);
+            }
+            for arg in &extra_args {
+                cmd.arg(arg);
+            }
+            for arg in args {
+                cmd.arg(arg);
+            }
+            cmd
+        }
+        ScriptRunner::ForgeBuild => {
+            let mut cmd = Command::new("forge");
+            cmd.arg("build");
+            for arg in &extra_args {
+                cmd.arg(arg);
+            }
+            for arg in args {
+                cmd.arg(arg);
+            }
+            cmd
+        }
+        // =====================
+        // Hardhat (EVM/Hedera)
+        // =====================
+        ScriptRunner::Hardhat => {
+            let mut cmd = Command::new("npx");
+            cmd.arg("hardhat").arg("run").arg(&script.file_path);
+            for arg in &extra_args {
+                cmd.arg(arg);
+            }
+            for arg in args {
+                cmd.arg(arg);
+            }
+            cmd
+        }
+        ScriptRunner::HardhatTest => {
+            let mut cmd = Command::new("npx");
+            cmd.arg("hardhat").arg("test");
+            if !script.file_path.is_empty() && script.file_path != "." {
+                cmd.arg(&script.file_path);
+            }
+            for arg in &extra_args {
+                cmd.arg(arg);
+            }
+            for arg in args {
+                cmd.arg(arg);
+            }
+            cmd
+        }
+        ScriptRunner::HardhatCompile => {
+            let mut cmd = Command::new("npx");
+            cmd.arg("hardhat").arg("compile");
+            for arg in &extra_args {
+                cmd.arg(arg);
+            }
+            for arg in args {
+                cmd.arg(arg);
+            }
+            cmd
+        }
+        // =====================
+        // Anchor (Solana)
+        // =====================
+        ScriptRunner::Anchor => {
+            let mut cmd = Command::new("anchor");
+            cmd.arg("run");
+            if !script.file_path.is_empty() && script.file_path != "." {
+                cmd.arg(&script.file_path);
+            }
+            for arg in &extra_args {
+                cmd.arg(arg);
+            }
+            for arg in args {
+                cmd.arg(arg);
+            }
+            cmd
+        }
+        ScriptRunner::AnchorTest => {
+            let mut cmd = Command::new("anchor");
+            cmd.arg("test");
+            if !script.file_path.is_empty() && script.file_path != "." {
+                cmd.arg(&script.file_path);
+            }
+            for arg in &extra_args {
+                cmd.arg(arg);
+            }
+            for arg in args {
+                cmd.arg(arg);
+            }
+            cmd
+        }
+        ScriptRunner::AnchorBuild => {
+            let mut cmd = Command::new("anchor");
+            cmd.arg("build");
+            for arg in &extra_args {
+                cmd.arg(arg);
+            }
+            for arg in args {
+                cmd.arg(arg);
+            }
+            cmd
+        }
+        // =====================
+        // Aptos Move
+        // =====================
+        ScriptRunner::AptosMoveCompile => {
+            let mut cmd = Command::new("aptos");
+            cmd.arg("move").arg("compile");
+            for arg in &extra_args {
+                cmd.arg(arg);
+            }
+            for arg in args {
+                cmd.arg(arg);
+            }
+            cmd
+        }
+        ScriptRunner::AptosMoveTest => {
+            let mut cmd = Command::new("aptos");
+            cmd.arg("move").arg("test");
+            if !script.file_path.is_empty() && script.file_path != "." {
+                cmd.arg("--filter").arg(&script.file_path);
+            }
+            for arg in &extra_args {
+                cmd.arg(arg);
+            }
+            for arg in args {
+                cmd.arg(arg);
+            }
+            cmd
+        }
+        ScriptRunner::AptosMovePublish => {
+            let mut cmd = Command::new("aptos");
+            cmd.arg("move").arg("publish");
+            for arg in &extra_args {
+                cmd.arg(arg);
+            }
+            for arg in args {
+                cmd.arg(arg);
+            }
             cmd
         }
     }
