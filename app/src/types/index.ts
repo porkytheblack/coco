@@ -339,6 +339,8 @@ export interface AIContext {
   // Recent user actions for context
   recentActions?: string;
   workspaceId?: string;
+  // Enable AI actions (executing commands in the app)
+  enableActions?: boolean;
 }
 
 export interface AISettings {
