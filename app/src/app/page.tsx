@@ -790,11 +790,10 @@ export default function AppPage() {
                     key={tx.id}
                     className="p-4 hover:bg-coco-bg-secondary transition-colors cursor-pointer"
                     onClick={() => {
-                      
                       if (selectedChain?.blockExplorerUrl) {
-                        let ecosystem = selectedChain.ecosystem;
-                        const network = selectedChain.networkType
-                        let link =`${selectedChain.blockExplorerUrl}`;
+                        const ecosystem = selectedChain.ecosystem;
+                        const network = selectedChain.networkType;
+                        let link = `${selectedChain.blockExplorerUrl}`;
                         if (ecosystem === 'evm') {
                           link += `/tx/${tx.txHash}`;
                         }else if (ecosystem === 'solana') {
