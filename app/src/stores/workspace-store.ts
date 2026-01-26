@@ -13,6 +13,7 @@ import type {
   MoveDefinition,
 } from '@/types';
 import * as tauri from '@/lib/tauri';
+import { trackTransactionExecution, trackContractOperation, trackScriptRun } from './action-tracking-store';
 import { getAdapter } from '@/lib/adapters';
 
 // Execution context for real blockchain transactions
@@ -433,6 +434,15 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
       set((state) => ({
         contracts: [...state.contracts, contract],
       }));
+
+      // Track the contract addition for AI context
+      trackContractOperation({
+        operation: 'add',
+        contractName: contract.name,
+        interfaceType: contract.interfaceType,
+        workspaceId: currentWorkspace.id,
+        contractId: contract.id,
+      });
     } catch (error) {
       console.error('Failed to add contract:', error);
       throw error;
@@ -440,6 +450,8 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
   },
 
   deleteContract: async (contractId: string) => {
+    const contract = get().contracts.find((c) => c.id === contractId);
+    const workspaceId = get().currentWorkspace?.id;
     try {
       if (tauri.checkIsTauri()) {
         await tauri.deleteContract(contractId);
@@ -447,6 +459,17 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
       set((state) => ({
         contracts: state.contracts.filter((c) => c.id !== contractId),
       }));
+
+      // Track the contract deletion for AI context
+      if (contract) {
+        trackContractOperation({
+          operation: 'delete',
+          contractName: contract.name,
+          interfaceType: contract.interfaceType,
+          workspaceId,
+          contractId,
+        });
+      }
     } catch (error) {
       console.error('Failed to delete contract:', error);
       throw error;
@@ -507,6 +530,15 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
       set((state) => ({
         contracts: state.contracts.map((c) => (c.id === request.contractId ? contract : c)),
       }));
+
+      // Track the contract update for AI context
+      trackContractOperation({
+        operation: 'update',
+        contractName: contract.name,
+        interfaceType: contract.interfaceType,
+        workspaceId: get().currentWorkspace?.id,
+        contractId: contract.id,
+      });
 
       return contract;
     } catch (error) {
@@ -856,6 +888,20 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
           ? { ...state.selectedTransaction, lastRun: result }
           : state.selectedTransaction,
       }));
+
+      // Track the transaction execution for AI context
+      trackTransactionExecution({
+        transactionName: transaction.name || 'Unnamed Transaction',
+        functionName: transaction.functionName || 'unknown',
+        contractName: transaction.contract?.name,
+        success: result.status === 'success',
+        txHash: result.txHash,
+        error: result.errorMessage,
+        workspaceId: currentWorkspace.id,
+        chainId: currentWorkspace.chainId,
+        transactionId,
+        contractId: transaction.contractId,
+      });
 
       return result;
     } catch (error) {

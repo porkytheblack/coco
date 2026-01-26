@@ -15,6 +15,7 @@ import { executeWorkflow, executeWorkflowWithMode, slugify, type ExecutionHandle
 import { createRunEmitter, workflowEvents } from '@/lib/workflow/events';
 import { updateWorkflowRunStatus, updateWorkflowRunStepLogs, executeTransaction, runScript, getScriptRunLogs, executeAdapter, listEnvVarsWithValues } from '@/lib/tauri/commands';
 import { useWorkspaceStore, useChainStore } from '@/stores';
+import { trackWorkflowRun } from '@/stores/action-tracking-store';
 import { Effect } from 'effect';
 
 // ============================================================================
@@ -582,6 +583,18 @@ export function WorkflowBuilder({
       await updateWorkflowRunStepLogs(runData.id, JSON.stringify(result.stepLogs));
       await updateWorkflowRunStatus(runData.id, result.status, undefined, result.error);
       refetchRuns();
+
+      // Track workflow run for AI context
+      const completedSteps = result.stepLogs.filter(log => log.status === 'completed').length;
+      trackWorkflowRun({
+        workflowName: workflow.name,
+        status: result.status,
+        stepsCompleted: completedSteps,
+        totalSteps: definition.nodes.length,
+        error: result.error,
+        workspaceId: currentWorkspace?.id,
+        workflowId: workflow.id,
+      });
 
       if (result.status === 'completed') {
         addToast({ title: "Execution Complete", message: "Steps executed successfully", type: "success" });

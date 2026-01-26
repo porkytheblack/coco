@@ -13,6 +13,7 @@ import {
   useEnvVars,
 } from '@/hooks';
 import { useToastStore } from '@/stores';
+import { trackScriptRun } from '@/stores/action-tracking-store';
 import type { Script, ScriptFlag, ScriptRunStatus } from '@/types';
 
 interface ScriptRunPanelProps {
@@ -62,6 +63,20 @@ export function ScriptRunPanel({ script, workspaceId, onClose }: ScriptRunPanelP
       refetchLogs();
     }
   }, [activeRunId, currentRun, isRunning, refetchLogs]);
+
+  // Track script run completion for AI context
+  useEffect(() => {
+    if (currentRun && (currentRun.status === 'success' || currentRun.status === 'failed' || currentRun.status === 'cancelled')) {
+      trackScriptRun({
+        scriptName: script.name,
+        success: currentRun.status === 'success',
+        output: logs?.slice(0, 500),
+        error: currentRun.status === 'failed' ? 'Script execution failed' : undefined,
+        workspaceId,
+        scriptId: script.id,
+      });
+    }
+  }, [currentRun?.status, script.name, script.id, workspaceId, logs]);
 
   const startScript = useStartScriptAsync();
   const cancelScript = useCancelScriptRun();
