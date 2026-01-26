@@ -226,6 +226,35 @@ export const CHAIN_REGISTRY: BlockchainDefinition[] = [
       },
     ],
   },
+  {
+    id: 'hedera',
+    name: 'Hedera',
+    ecosystem: 'evm',
+    nativeCurrency: 'HBAR',
+    currencyDecimals: 18,
+    iconId: 'hedera',
+    networks: [
+      {
+        id: 'hedera-mainnet',
+        name: 'Mainnet',
+        networkType: 'mainnet',
+        chainIdNumeric: 295,
+        rpcUrl: 'https://mainnet.hashio.io/api',
+        blockExplorerUrl: 'https://hashscan.io/mainnet',
+        blockExplorerApiUrl: 'https://mainnet-public.mirrornode.hedera.com/api/v1',
+      },
+      {
+        id: 'hedera-testnet',
+        name: 'Testnet',
+        networkType: 'testnet',
+        chainIdNumeric: 296,
+        rpcUrl: 'https://testnet.hashio.io/api',
+        blockExplorerUrl: 'https://hashscan.io/testnet',
+        blockExplorerApiUrl: 'https://testnet.mirrornode.hedera.com/api/v1',
+        faucetUrl: 'https://portal.hedera.com/faucet',
+      },
+    ],
+  },
   // Non-EVM Chains
   {
     id: 'solana',

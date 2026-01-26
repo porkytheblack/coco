@@ -93,6 +93,7 @@ const config: Config = {
       },
       animation: {
         'slide-in': 'slideIn 300ms ease-out',
+        'slide-in-left': 'slideInLeft 300ms ease-out',
         'slide-up': 'slideUp 300ms ease-out',
         'fade-in': 'fadeIn 200ms ease-out',
         'scale-in': 'scaleIn 200ms ease-out',
@@ -103,6 +104,10 @@ const config: Config = {
       keyframes: {
         slideIn: {
           '0%': { transform: 'translateX(100%)' },
+          '100%': { transform: 'translateX(0)' },
+        },
+        slideInLeft: {
+          '0%': { transform: 'translateX(-100%)' },
           '100%': { transform: 'translateX(0)' },
         },
         slideUp: {

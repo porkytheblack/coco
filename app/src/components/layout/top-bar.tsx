@@ -50,14 +50,14 @@ export function TopBar({
       {onCocoChat && aiSettings.enabled && (
         <button
           onClick={onCocoChat}
-          className="absolute left-1/2 -translate-x-1/2 p-2 rounded-full hover:bg-coco-bg-secondary transition-colors no-drag"
+          className="absolute left-1/2 -translate-x-1/2 w-11 h-11 flex items-center justify-center rounded-lg hover:bg-coco-bg-secondary transition-colors no-drag"
           title="Chat with Coco"
         >
           <Image
             src="/brand/coco-paw.png"
             alt="Chat with Coco"
-            width={24}
-            height={24}
+            width={28}
+            height={28}
           />
         </button>
       )}

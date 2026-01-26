@@ -44,6 +44,23 @@ class AIService {
     return this.adapter.chat(messages, context);
   }
 
+  async chatWithHistory(messages: ChatMessage[], context?: AIContext, isFirstMessage?: boolean): Promise<string> {
+    if (!this.adapter) {
+      throw new Error('AI adapter not configured');
+    }
+
+    // Only include full context (recent actions, etc.) on first message
+    // For subsequent messages, just include basic context
+    const contextToUse = isFirstMessage ? context : {
+      ecosystem: context?.ecosystem,
+      chainId: context?.chainId,
+      enableActions: context?.enableActions,
+      // Omit recentActions and other heavy context for follow-up messages
+    };
+
+    return this.adapter.chat(messages, contextToUse);
+  }
+
   async listModels(provider: AIProvider, config: AIProviderConfig): Promise<ModelInfo[]> {
     const adapter = this.createAdapter(provider, config);
     return adapter.listModels();

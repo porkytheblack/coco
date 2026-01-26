@@ -12,6 +12,7 @@ import type {
   AdapterNode,
   TransformNode,
   LoggingNode,
+  ScriptOutputExtraction,
 } from '../types';
 import {
   isStartNode,
@@ -23,6 +24,7 @@ import {
   isTransformNode,
   isLoggingNode,
 } from '../types';
+import type { RunEmitter } from '../events';
 
 // ============================================================================
 // Error Types
@@ -68,9 +70,12 @@ export interface ExecutionContext {
   definition: WorkflowDefinition;
   variables: Record<string, unknown>;
   stepLogs: WorkflowStepLog[];
-  
+
   // External handlers (injected by the runtime)
   handlers: ExecutionHandlers;
+
+  // Optional event emitter for real-time updates
+  emitter?: RunEmitter;
 }
 
 export interface ExecutionHandlers {
@@ -347,6 +352,60 @@ function executeTransactionNode(
   );
 }
 
+/**
+ * Extract values from script output using regex patterns.
+ */
+function extractScriptOutputValues(
+  output: string | undefined,
+  extractions: ScriptOutputExtraction[] | undefined
+): Record<string, unknown> {
+  const extracted: Record<string, unknown> = {};
+
+  if (!output || !extractions || extractions.length === 0) {
+    return extracted;
+  }
+
+  for (const extraction of extractions) {
+    try {
+      const regex = new RegExp(extraction.pattern, 'gm');
+      const match = regex.exec(output);
+
+      if (match) {
+        const matchGroup = extraction.matchGroup ?? 1;
+        const rawValue = match[matchGroup] ?? match[0];
+
+        // Type coercion based on extraction type
+        let value: unknown = rawValue;
+        switch (extraction.type) {
+          case 'number':
+            value = parseFloat(rawValue);
+            if (isNaN(value as number)) value = 0;
+            break;
+          case 'boolean':
+            value = rawValue.toLowerCase() === 'true' || rawValue === '1';
+            break;
+          case 'json':
+            try {
+              value = JSON.parse(rawValue);
+            } catch {
+              value = rawValue;
+            }
+            break;
+          case 'string':
+          default:
+            value = rawValue;
+        }
+
+        extracted[extraction.name] = value;
+      }
+    } catch (e) {
+      console.warn(`Failed to extract "${extraction.name}" with pattern "${extraction.pattern}":`, e);
+    }
+  }
+
+  return extracted;
+}
+
 function executeScriptNode(
   node: ScriptNode,
   ctx: ExecutionContext
@@ -361,12 +420,26 @@ function executeScriptNode(
             resolvedFlags,
             node.config.envVarKeys
           );
-          
+
+          // Extract values from script output using configured patterns
+          const extractedValues = extractScriptOutputValues(
+            result.output,
+            node.config.extractions
+          );
+
+          // Build structured output with is_success and extractions
+          const structuredOutput = {
+            is_success: result.success,
+            output: result.output,
+            error: result.error,
+            ...extractedValues,
+          };
+
           if (!result.success) {
             throw new Error(result.error || 'Script failed');
           }
-          
-          return result;
+
+          return structuredOutput;
         },
         catch: (e) => new WorkflowExecutionError(node.id, `Script execution failed: ${e}`),
       })
@@ -378,6 +451,18 @@ function executeScriptNode(
         }
         setNestedValue(ctx.variables, `${node.id}.result`, result);
         setNestedValue(ctx.variables, `${slugify(node.label || node.type)}.result`, result);
+
+        // Also set each extracted value directly for easy access
+        const nodeSlug = slugify(node.label || node.type);
+        for (const [key, value] of Object.entries(result)) {
+          if (key !== 'is_success' && key !== 'output' && key !== 'error') {
+            setNestedValue(ctx.variables, `${nodeSlug}.${key}`, value);
+            setNestedValue(ctx.variables, `${node.id}.${key}`, value);
+          }
+        }
+        // Also set is_success directly for condition nodes
+        setNestedValue(ctx.variables, `${nodeSlug}.is_success`, result.is_success);
+        setNestedValue(ctx.variables, `${node.id}.is_success`, result.is_success);
       })
     )
   );
@@ -512,6 +597,10 @@ function logNodeStart(ctx: ExecutionContext, node: WorkflowNode): void {
     status: 'running',
     startedAt: new Date().toISOString(),
   });
+
+  // Emit event for real-time UI updates
+  ctx.emitter?.emitStepStart(node.id, node.label || node.type, node.type);
+  ctx.emitter?.emitLogsUpdate([...ctx.stepLogs]);
 }
 
 function logNodeComplete(ctx: ExecutionContext, node: WorkflowNode, output?: unknown): void {
@@ -521,6 +610,10 @@ function logNodeComplete(ctx: ExecutionContext, node: WorkflowNode, output?: unk
     log.completedAt = new Date().toISOString();
     log.output = output;
   }
+
+  // Emit event for real-time UI updates
+  ctx.emitter?.emitStepComplete(node.id, output);
+  ctx.emitter?.emitLogsUpdate([...ctx.stepLogs]);
 }
 
 function logNodeError(ctx: ExecutionContext, node: WorkflowNode, error: string): void {
@@ -530,6 +623,10 @@ function logNodeError(ctx: ExecutionContext, node: WorkflowNode, error: string):
     log.completedAt = new Date().toISOString();
     log.error = error;
   }
+
+  // Emit event for real-time UI updates
+  ctx.emitter?.emitStepError(node.id, error);
+  ctx.emitter?.emitLogsUpdate([...ctx.stepLogs]);
 }
 
 /**
@@ -702,14 +799,15 @@ export function executeWorkflow(
   runId: string,
   definition: WorkflowDefinition,
   initialVariables: Record<string, unknown>,
-  handlers: ExecutionHandlers
+  handlers: ExecutionHandlers,
+  emitter?: RunEmitter
 ): Effect.Effect<WorkflowRun, WorkflowError> {
   const startNode = findStartNode(definition);
-  
+
   if (!startNode) {
     return Effect.fail(new WorkflowExecutionError('', 'No start node found in workflow'));
   }
-  
+
   // Initialize global variables
   const variables: Record<string, unknown> = { ...initialVariables };
   if (definition.variables) {
@@ -719,7 +817,7 @@ export function executeWorkflow(
       }
     }
   }
-  
+
   const ctx: ExecutionContext = {
     workflowId,
     runId,
@@ -727,23 +825,31 @@ export function executeWorkflow(
     variables,
     stepLogs: [],
     handlers,
+    emitter,
   };
-  
+
   const startTime = new Date().toISOString();
-  
+
+  // Emit run start event
+  emitter?.emitRunStart();
+
   return pipe(
     executeWorkflowStep([startNode.id], ctx, new Set()),
-    Effect.map(() => ({
-      id: runId,
-      workflowId,
-      status: 'completed' as const,
-      variables: ctx.variables,
-      stepLogs: ctx.stepLogs,
-      startedAt: startTime,
-      completedAt: new Date().toISOString(),
-    })),
-    Effect.catchAll((error) =>
-      Effect.succeed({
+    Effect.map(() => {
+      const result = {
+        id: runId,
+        workflowId,
+        status: 'completed' as const,
+        variables: ctx.variables,
+        stepLogs: ctx.stepLogs,
+        startedAt: startTime,
+        completedAt: new Date().toISOString(),
+      };
+      emitter?.emitRunComplete('completed');
+      return result;
+    }),
+    Effect.catchAll((error) => {
+      const result = {
         id: runId,
         workflowId,
         status: 'failed' as const,
@@ -752,8 +858,10 @@ export function executeWorkflow(
         error: error.message,
         startedAt: startTime,
         completedAt: new Date().toISOString(),
-      })
-    )
+      };
+      emitter?.emitRunError(error.message);
+      return Effect.succeed(result);
+    })
   );
 }
 
@@ -775,6 +883,7 @@ export interface ExecuteWithModeOptions {
   handlers: ExecutionHandlers;
   mode: ExecutionMode;
   existingStepLogs?: WorkflowStepLog[];
+  emitter?: RunEmitter;
 }
 
 /**
@@ -940,7 +1049,7 @@ function executeFromNode(
 
 /**
  * Execute a workflow with the specified execution mode.
- * 
+ *
  * Modes:
  * - full: Execute from start to end
  * - single: Execute only the specified node
@@ -950,8 +1059,8 @@ function executeFromNode(
 export function executeWorkflowWithMode(
   options: ExecuteWithModeOptions
 ): Effect.Effect<WorkflowRun, WorkflowError> {
-  const { workflowId, runId, definition, initialVariables, handlers, mode, existingStepLogs } = options;
-  
+  const { workflowId, runId, definition, initialVariables, handlers, mode, existingStepLogs, emitter } = options;
+
   // Initialize global variables
   const variables: Record<string, unknown> = { ...initialVariables };
   if (definition.variables) {
@@ -961,7 +1070,7 @@ export function executeWorkflowWithMode(
       }
     }
   }
-  
+
   const ctx: ExecutionContext = {
     workflowId,
     runId,
@@ -969,21 +1078,25 @@ export function executeWorkflowWithMode(
     variables,
     stepLogs: existingStepLogs || [],
     handlers,
+    emitter,
   };
-  
+
+  // Emit run start
+  emitter?.emitRunStart();
+
   switch (mode.type) {
     case 'full':
-      return executeWorkflow(workflowId, runId, definition, initialVariables, handlers);
-      
+      return executeWorkflow(workflowId, runId, definition, initialVariables, handlers, emitter);
+
     case 'single':
       return executeSingleNode(mode.nodeId, ctx);
-      
+
     case 'upto':
       return executeUptoNode(mode.nodeId, ctx);
-      
+
     case 'resume':
       return executeFromNode(mode.fromNodeId, ctx, mode.variables);
-      
+
     default:
       return Effect.fail(new WorkflowExecutionError('', `Unknown execution mode: ${(mode as ExecutionMode).type}`));
   }

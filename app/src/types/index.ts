@@ -4,7 +4,30 @@ export type NetworkType = 'mainnet' | 'testnet' | 'devnet' | 'custom';
 export type InterfaceType = 'abi' | 'idl' | 'move';
 export type ScriptRunStatus = 'pending' | 'running' | 'success' | 'failed' | 'cancelled';
 export type ScriptFlagType = 'string' | 'number' | 'boolean' | 'file';
-export type ScriptRunner = 'bash' | 'node' | 'bun' | 'python' | 'forge' | 'forge-test' | 'forge-build' | 'npx' | 'custom';
+export type ScriptRunner =
+  // General runners
+  | 'bash'
+  | 'node'
+  | 'bun'
+  | 'python'
+  | 'npx'
+  | 'custom'
+  // EVM/Hedera - Foundry (forge)
+  | 'forge'
+  | 'forge-test'
+  | 'forge-build'
+  // EVM/Hedera - Hardhat
+  | 'hardhat'
+  | 'hardhat-test'
+  | 'hardhat-compile'
+  // Solana - Anchor
+  | 'anchor'
+  | 'anchor-test'
+  | 'anchor-build'
+  // Aptos - Move
+  | 'aptos-move-compile'
+  | 'aptos-move-test'
+  | 'aptos-move-publish';
 export type MessageRole = 'user' | 'assistant' | 'system';
 
 // Move Definition Types (for Aptos - no ABI/IDL available)
@@ -336,6 +359,11 @@ export interface AIContext {
   transactionId?: string;
   errorMessage?: string;
   sourceCode?: string;
+  // Recent user actions for context
+  recentActions?: string;
+  workspaceId?: string;
+  // Enable AI actions (executing commands in the app)
+  enableActions?: boolean;
 }
 
 export interface AISettings {

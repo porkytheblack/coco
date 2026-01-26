@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { Key, Trash2, Edit, Copy, Check } from 'lucide-react';
+import { Key, Trash2, Edit, Copy, Check, Eye, EyeOff } from 'lucide-react';
 import { Card, IconButton } from '@/components/ui';
 import { getEnvValue } from '@/lib/tauri/commands';
 import type { EnvironmentVariable } from '@/types';
@@ -16,6 +16,7 @@ export function EnvVarCard({ envVar, onEdit, onDelete }: EnvVarCardProps) {
   const [isHovered, setIsHovered] = useState(false);
   const [value, setValue] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
+  const [showValue, setShowValue] = useState(false);
 
   // Fetch the decrypted value on mount
   useEffect(() => {
@@ -30,6 +31,12 @@ export function EnvVarCard({ envVar, onEdit, onDelete }: EnvVarCardProps) {
       setCopied(true);
       setTimeout(() => setCopied(false), 2000);
     }
+  };
+
+  // Mask the value with dots, showing first and last char for context
+  const getMaskedValue = (val: string) => {
+    if (val.length <= 4) return '••••••••';
+    return `${val[0]}${'•'.repeat(Math.min(val.length - 2, 8))}${val[val.length - 1]}`;
   };
 
   return (
@@ -47,23 +54,36 @@ export function EnvVarCard({ envVar, onEdit, onDelete }: EnvVarCardProps) {
             <h3 className="font-mono font-medium text-coco-text-primary truncate">
               {envVar.key}
             </h3>
-            {/* Show the actual value */}
+            {/* Show masked or actual value based on toggle */}
             <div className="flex items-center gap-2 mt-1">
               <code className="text-sm font-mono text-coco-text-secondary bg-coco-bg-tertiary px-2 py-0.5 rounded truncate max-w-[300px]">
-                {value ?? '••••••••'}
+                {value ? (showValue ? value : getMaskedValue(value)) : '••••••••'}
               </code>
               {value && (
-                <button
-                  onClick={handleCopy}
-                  className="p-1 hover:bg-coco-bg-tertiary rounded transition-colors"
-                  title="Copy value"
-                >
-                  {copied ? (
-                    <Check className="w-3 h-3 text-green-500" />
-                  ) : (
-                    <Copy className="w-3 h-3 text-coco-text-tertiary" />
-                  )}
-                </button>
+                <>
+                  <button
+                    onClick={() => setShowValue(!showValue)}
+                    className="p-1 hover:bg-coco-bg-tertiary rounded transition-colors"
+                    title={showValue ? 'Hide value' : 'Show value'}
+                  >
+                    {showValue ? (
+                      <EyeOff className="w-3 h-3 text-coco-text-tertiary" />
+                    ) : (
+                      <Eye className="w-3 h-3 text-coco-text-tertiary" />
+                    )}
+                  </button>
+                  <button
+                    onClick={handleCopy}
+                    className="p-1 hover:bg-coco-bg-tertiary rounded transition-colors"
+                    title="Copy value"
+                  >
+                    {copied ? (
+                      <Check className="w-3 h-3 text-green-500" />
+                    ) : (
+                      <Copy className="w-3 h-3 text-coco-text-tertiary" />
+                    )}
+                  </button>
+                </>
               )}
             </div>
             {envVar.description && (

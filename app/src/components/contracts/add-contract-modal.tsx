@@ -1,10 +1,10 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
-import { FileCode, Sparkles, Loader2 } from 'lucide-react';
+import { FileCode, Sparkles, Loader2, Upload } from 'lucide-react';
 import Image from 'next/image';
 import { Button, Input, Modal } from '@/components/ui';
 import { MoveDefinitionBuilder } from './move-definition-builder';
@@ -112,6 +112,9 @@ export function AddContractModal({
   const [evmSourceCode, setEvmSourceCode] = useState('');
   const [isAIProcessing, setIsAIProcessing] = useState(false);
   const [aiError, setAIError] = useState<string | null>(null);
+
+  // File upload ref
+  const abiFileInputRef = useRef<HTMLInputElement>(null);
 
   // TanStack Query hooks
   const addContract = useAddContract();
@@ -374,6 +377,51 @@ export function AddContractModal({
     }
   };
 
+  // Handle ABI file upload
+  const handleABIFileUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+
+    setError(null);
+
+    try {
+      const content = await file.text();
+      const parsed = JSON.parse(content);
+
+      let abi: unknown[];
+
+      // Detect format: Foundry/Hardhat artifact (has 'abi' property) vs standard ABI (is array)
+      if (Array.isArray(parsed)) {
+        // Standard ABI format - array of function/event definitions
+        abi = parsed;
+      } else if (parsed.abi && Array.isArray(parsed.abi)) {
+        // Foundry/Hardhat artifact format - abi is a property
+        abi = parsed.abi;
+
+        // Try to extract contract name if available
+        if (parsed.contractName && !newForm.getValues('name')) {
+          newForm.setValue('name', parsed.contractName);
+        }
+      } else {
+        setError('Invalid ABI file format. Expected a JSON array or an artifact with "abi" property.');
+        return;
+      }
+
+      // Set the ABI to the form
+      newForm.setValue('abiJson', JSON.stringify(abi, null, 2));
+
+      // Clear source code mode if active
+      setEvmSourceCode('');
+    } catch (err) {
+      setError(`Failed to parse ABI file: ${err instanceof Error ? err.message : 'Invalid JSON'}`);
+    }
+
+    // Reset file input
+    if (abiFileInputRef.current) {
+      abiFileInputRef.current.value = '';
+    }
+  };
+
   const getEcosystemLabel = () => {
     switch (ecosystem) {
       case 'evm':
@@ -570,20 +618,39 @@ export function AddContractModal({
             {/* Interface input based on ecosystem */}
             {ecosystem === 'evm' && (
               <div>
+                {/* Hidden file input for ABI upload */}
+                <input
+                  ref={abiFileInputRef}
+                  type="file"
+                  accept=".json"
+                  onChange={handleABIFileUpload}
+                  className="hidden"
+                />
+
                 <div className="flex items-center justify-between mb-1.5">
                   <label className="block text-sm font-medium text-coco-text-primary">
                     ABI (JSON)
                   </label>
-                  {aiSettings.enabled && (
+                  <div className="flex items-center gap-3">
                     <button
                       type="button"
-                      onClick={() => setEvmSourceCode(evmSourceCode ? '' : ' ')} // Toggle source input visibility
+                      onClick={() => abiFileInputRef.current?.click()}
                       className="flex items-center gap-1 text-xs text-coco-accent hover:underline"
                     >
-                      <Sparkles className="w-3 h-3" />
-                      {evmSourceCode ? 'Paste ABI' : 'Generate from source'}
+                      <Upload className="w-3 h-3" />
+                      Upload file
                     </button>
-                  )}
+                    {aiSettings.enabled && (
+                      <button
+                        type="button"
+                        onClick={() => setEvmSourceCode(evmSourceCode ? '' : ' ')} // Toggle source input visibility
+                        className="flex items-center gap-1 text-xs text-coco-accent hover:underline"
+                      >
+                        <Sparkles className="w-3 h-3" />
+                        {evmSourceCode ? 'Paste ABI' : 'Generate from source'}
+                      </button>
+                    )}
+                  </div>
                 </div>
 
                 {evmSourceCode ? (
@@ -638,7 +705,7 @@ contract Token {
                       className="w-full h-40 px-3 py-2 text-sm font-mono bg-coco-bg-primary border border-coco-border-default rounded-md focus:outline-none focus:ring-2 focus:ring-coco-accent resize-none"
                     />
                     <p className="mt-1 text-xs text-coco-text-tertiary">
-                      Paste the contract ABI JSON array from your compiled contract or block explorer.
+                      Paste the ABI or upload a JSON file. Supports Foundry/Hardhat artifacts (extracts ABI automatically).
                     </p>
                   </>
                 )}

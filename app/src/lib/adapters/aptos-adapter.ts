@@ -94,17 +94,29 @@ export const aptosAdapter: ChainAdapter = {
       const moveDef = contractInterface as import('@/types').MoveDefinition | undefined;
 
       if (moveDef?.moduleAddress && moveDef?.moduleName) {
-        // Use Move definition if available
+        // Use Move definition if available (preferred)
         functionPath = `${moveDef.moduleAddress}::${moveDef.moduleName}::${functionName}`;
       } else if (contractAddress.includes('::')) {
-        // If address already includes module path, append function
-        functionPath = contractAddress.includes(functionName)
-          ? contractAddress
-          : `${contractAddress}::${functionName}`;
+        // If address already includes module path (e.g., 0x1::coin), use it
+        const parts = contractAddress.split('::');
+        if (parts.length === 2) {
+          // Format: address::module - append function name
+          functionPath = `${contractAddress}::${functionName}`;
+        } else if (parts.length >= 3) {
+          // Already has full path, verify or replace function name
+          const basePath = parts.slice(0, 2).join('::');
+          functionPath = `${basePath}::${functionName}`;
+        } else {
+          functionPath = `${contractAddress}::${functionName}`;
+        }
       } else {
-        // Fallback: use address as module address
+        // Fallback: address only - this will likely fail, but attempt anyway
+        // The user should configure moduleAddress and moduleName in the Move definition
+        console.warn('[Aptos] Missing module name. Please configure the Move definition with moduleAddress and moduleName.');
         functionPath = `${contractAddress}::${functionName}`;
       }
+
+      console.log('[Aptos] View function path:', functionPath);
 
       // For view functions, use the view API
       const result = await aptos.view({
@@ -162,15 +174,24 @@ export const aptosAdapter: ChainAdapter = {
       const moveDef = contractInterface as import('@/types').MoveDefinition | undefined;
 
       if (moveDef?.moduleAddress && moveDef?.moduleName) {
-        // Use Move definition if available
+        // Use Move definition if available (preferred)
         functionPath = `${moveDef.moduleAddress}::${moveDef.moduleName}::${functionName}`;
       } else if (contractAddress.includes('::')) {
-        // If address already includes module path, append function
-        functionPath = contractAddress.includes(functionName)
-          ? contractAddress
-          : `${contractAddress}::${functionName}`;
+        // If address already includes module path (e.g., 0x1::coin), use it
+        const parts = contractAddress.split('::');
+        if (parts.length === 2) {
+          // Format: address::module - append function name
+          functionPath = `${contractAddress}::${functionName}`;
+        } else if (parts.length >= 3) {
+          // Already has full path, verify or replace function name
+          const basePath = parts.slice(0, 2).join('::');
+          functionPath = `${basePath}::${functionName}`;
+        } else {
+          functionPath = `${contractAddress}::${functionName}`;
+        }
       } else {
-        // Fallback: use address as module address
+        // Fallback: address only - this will likely fail, but attempt anyway
+        console.warn('[Aptos] Missing module name. Please configure the Move definition with moduleAddress and moduleName.');
         functionPath = `${contractAddress}::${functionName}`;
       }
 

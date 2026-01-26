@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { Settings, Plus, Play, Rocket, Copy, ExternalLink, Trash2, RefreshCw, ArrowUpRight, ArrowDownLeft, Sun, Moon, Search, Send, Droplet, FileCode, Key, Files } from 'lucide-react';
+import { Settings, Plus, Play, Rocket, Copy, ExternalLink, Trash2, RefreshCw, ArrowUpRight, ArrowDownLeft, Sun, Moon, Search, Send, Droplet, FileCode, Key, Files, GripVertical, Eye, EyeOff, AlertTriangle, CheckCircle } from 'lucide-react';
 import Image from 'next/image';
 import { TopBar } from '@/components/layout';
 import { IconButton, Button, StatusIndicator, CocoLogo } from '@/components/ui';
@@ -10,12 +10,12 @@ import { WorkspaceGrid, CreateWorkspaceModal, WorkspaceSettingsModal } from '@/c
 import { AddChainModal, ChainSettingsModal, BlockchainGrid, NetworkSelectionModal } from '@/components/chains';
 import { ContractList, AddContractModal, EditContractModal, ContractPanel } from '@/components/contracts';
 import { TransactionPanel, CreateTransactionModal } from '@/components/transactions';
-import { AISettingsModal, CocoChatModal } from '@/components/ai';
+import { AISettingsModal, CocoChatDrawer } from '@/components/ai';
 import { ScriptList } from '@/components/scripts';
 import { EnvVarList } from '@/components/env';
 import { WorkflowList, CreateWorkflowModal, WorkflowBuilder } from '@/components/workflows';
 import { useWorkflows, useWorkflow, useCreateWorkflow, useUpdateWorkflow, useRunWorkflow } from '@/hooks/use-workflows';
-import { useScripts } from '@/hooks';
+import { useScripts, useGetWalletPrivateKey } from '@/hooks';
 import { useChainStore, useWalletStore, useWorkspaceStore, useToastStore, useThemeStore, useAIStore } from '@/stores';
 import { useRouter } from '@/contexts';
 import { openExternal } from '@/lib/tauri/commands';
@@ -35,6 +35,7 @@ export default function AppPage() {
 
   // Chain selection page state
   const { chains, selectedChain, selectChain, addChain, updateChain, deleteChain, loadChains } = useChainStore();
+  const { recentWorkspaces, loadRecentWorkspaces } = useWorkspaceStore();
   const { addToast } = useToastStore();
   const [showChainSettings, setShowChainSettings] = useState(false);
 
@@ -45,6 +46,11 @@ export default function AppPage() {
   const [showCreateWorkspace, setShowCreateWorkspace] = useState(false);
   const [copiedAddress, setCopiedAddress] = useState(false);
   const [showSendModal, setShowSendModal] = useState(false);
+  const [showExportKey, setShowExportKey] = useState(false);
+  const [exportedPrivateKey, setExportedPrivateKey] = useState<string | null>(null);
+  const [showPrivateKey, setShowPrivateKey] = useState(false);
+  const [copiedPrivateKey, setCopiedPrivateKey] = useState(false);
+  const getPrivateKeyMutation = useGetWalletPrivateKey();
 
   // Workspace state
   const {
@@ -61,9 +67,13 @@ export default function AppPage() {
     createTransaction,
     executeTransaction,
     deleteTransaction,
+    reorderTransactions,
     deleteWorkspace,
     getTransactionRuns,
   } = useWorkspaceStore();
+
+  // Transaction reordering state
+  const [draggedTxIndex, setDraggedTxIndex] = useState<number | null>(null);
 
   // Workspace modals state
   const [showAddContract, setShowAddContract] = useState(false);
@@ -91,10 +101,11 @@ export default function AppPage() {
   const [showCocoChat, setShowCocoChat] = useState(false);
   const [chainSearch, setChainSearch] = useState('');
 
-  // Load chains on mount
+  // Load chains and recent workspaces on mount
   useEffect(() => {
     loadChains();
-  }, [loadChains]);
+    loadRecentWorkspaces();
+  }, [loadChains, loadRecentWorkspaces]);
 
   // Load data based on view
   useEffect(() => {
@@ -122,6 +133,12 @@ export default function AppPage() {
       return () => clearWorkspace();
     }
   }, [route.view, route.workspaceId, route.chainId, chains, loadWorkspace, clearWorkspace, selectChain, loadWallets]);
+
+  // Reset selected workflow when workspace changes
+  useEffect(() => {
+    setSelectedWorkflowId(null);
+    setWorkspaceTab('contracts');
+  }, [route.workspaceId]);
 
   // Load wallet transactions when viewing wallet detail
   useEffect(() => {
@@ -218,6 +235,76 @@ export default function AppPage() {
               </button>
             </div>
           </div>
+
+          {/* Recent Workspaces */}
+          {recentWorkspaces.length > 0 && !chainSearch && (
+            <div className="w-full max-w-4xl mb-8 no-drag">
+              <h2 className="text-sm font-semibold text-coco-text-secondary uppercase tracking-wider mb-3">
+                Recent Workspaces
+              </h2>
+              <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+                {recentWorkspaces.slice(0, 6).map((recent) => {
+                  const chain = chains.find(c => c.id === recent.chainId);
+                  const timeSince = getTimeSince(recent.accessedAt);
+                  const networkType = chain?.networkType;
+                  const ecosystemColor = getEcosystemColor(chain?.ecosystem);
+
+                  return (
+                    <button
+                      key={recent.workspaceId}
+                      onClick={() => navigate({ view: 'workspace', chainId: recent.chainId, workspaceId: recent.workspaceId })}
+                      className="flex items-start gap-3 p-3 bg-coco-bg-secondary border border-coco-border-subtle rounded-xl hover:border-coco-accent/50 hover:bg-coco-bg-tertiary hover:shadow-md transition-all text-left group"
+                    >
+                      {/* Chain Icon */}
+                      <div className={clsx(
+                        'w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0 transition-transform group-hover:scale-105',
+                        ecosystemColor.bg
+                      )}>
+                        {chain?.iconId ? (
+                          <Image
+                            src={`/chains/${chain.iconId}.svg`}
+                            alt={chain.name}
+                            width={24}
+                            height={24}
+                            className="object-contain"
+                            onError={(e) => {
+                              (e.target as HTMLImageElement).style.display = 'none';
+                            }}
+                          />
+                        ) : (
+                          <Rocket className={clsx('w-5 h-5', ecosystemColor.text)} />
+                        )}
+                      </div>
+
+                      <div className="min-w-0 flex-1">
+                        <p className="font-medium text-coco-text-primary truncate text-sm group-hover:text-coco-accent transition-colors">
+                          {recent.name}
+                        </p>
+                        <p className="text-xs text-coco-text-tertiary truncate mt-0.5">
+                          {chain?.name || 'Unknown chain'}
+                        </p>
+                        <div className="flex items-center gap-2 mt-1.5">
+                          {networkType && (
+                            <span className={clsx(
+                              'text-[10px] px-1.5 py-0.5 rounded-full font-medium',
+                              networkType === 'mainnet'
+                                ? 'bg-green-500/10 text-green-500'
+                                : 'bg-amber-500/10 text-amber-500'
+                            )}>
+                              {networkType}
+                            </span>
+                          )}
+                          <span className="text-[10px] text-coco-text-tertiary">
+                            {timeSince}
+                          </span>
+                        </div>
+                      </div>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          )}
 
           {/* Blockchain Grid */}
           <BlockchainGrid
@@ -321,7 +408,7 @@ export default function AppPage() {
           onClose={() => setShowAISettings(false)}
         />
 
-        <CocoChatModal
+        <CocoChatDrawer
           isOpen={showCocoChat}
           onClose={() => setShowCocoChat(false)}
         />
@@ -440,7 +527,7 @@ export default function AppPage() {
           </>
         )}
 
-        <CocoChatModal
+        <CocoChatDrawer
           isOpen={showCocoChat}
           onClose={() => setShowCocoChat(false)}
           context={{ ecosystem: selectedChain?.ecosystem, chainId: selectedChain?.id }}
@@ -595,7 +682,83 @@ export default function AppPage() {
                   <ExternalLink className="w-3 h-3 ml-1.5 opacity-60" />
                 </Button>
               )}
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={async () => {
+                  try {
+                    const key = await getPrivateKeyMutation.mutateAsync(wallet.id);
+                    setExportedPrivateKey(key);
+                    setShowExportKey(true);
+                  } catch (error) {
+                    addToast({ type: 'error', title: 'Failed to export key', message: String(error) });
+                  }
+                }}
+                isLoading={getPrivateKeyMutation.isPending}
+              >
+                <Key className="w-4 h-4 mr-2" />
+                Export Key
+              </Button>
             </div>
+
+            {/* Export Private Key Section */}
+            {showExportKey && exportedPrivateKey && (
+              <div className="mt-4 p-4 bg-amber-500/10 border border-amber-500/30 rounded-lg space-y-3">
+                <div className="flex items-start gap-2">
+                  <AlertTriangle className="w-5 h-5 text-amber-500 flex-shrink-0 mt-0.5" />
+                  <div>
+                    <h4 className="font-medium text-amber-500 text-sm">Private Key</h4>
+                    <p className="text-xs text-coco-text-secondary mt-1">
+                      Never share your private key. Anyone with this key can access your funds.
+                    </p>
+                  </div>
+                </div>
+                <div className="flex items-center gap-2 bg-coco-bg-primary rounded-lg p-3">
+                  <code className="flex-1 text-sm font-mono text-coco-text-primary break-all">
+                    {showPrivateKey ? exportedPrivateKey : '•'.repeat(Math.min(exportedPrivateKey.length, 32)) + '...'}
+                  </code>
+                  <button
+                    onClick={() => setShowPrivateKey(!showPrivateKey)}
+                    className="p-1.5 hover:bg-coco-bg-tertiary rounded transition-colors"
+                    title={showPrivateKey ? 'Hide' : 'Show'}
+                  >
+                    {showPrivateKey ? (
+                      <EyeOff className="w-4 h-4 text-coco-text-tertiary" />
+                    ) : (
+                      <Eye className="w-4 h-4 text-coco-text-tertiary" />
+                    )}
+                  </button>
+                  <button
+                    onClick={async () => {
+                      await navigator.clipboard.writeText(exportedPrivateKey);
+                      setCopiedPrivateKey(true);
+                      setTimeout(() => setCopiedPrivateKey(false), 2000);
+                    }}
+                    className="p-1.5 hover:bg-coco-bg-tertiary rounded transition-colors"
+                    title="Copy"
+                  >
+                    {copiedPrivateKey ? (
+                      <CheckCircle className="w-4 h-4 text-coco-success" />
+                    ) : (
+                      <Copy className="w-4 h-4 text-coco-text-tertiary" />
+                    )}
+                  </button>
+                </div>
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  onClick={() => {
+                    setShowExportKey(false);
+                    setExportedPrivateKey(null);
+                    setShowPrivateKey(false);
+                    setCopiedPrivateKey(false);
+                  }}
+                  className="w-full"
+                >
+                  Hide Private Key
+                </Button>
+              </div>
+            )}
           </div>
 
           {/* Transaction History */}
@@ -627,11 +790,10 @@ export default function AppPage() {
                     key={tx.id}
                     className="p-4 hover:bg-coco-bg-secondary transition-colors cursor-pointer"
                     onClick={() => {
-                      
                       if (selectedChain?.blockExplorerUrl) {
-                        let ecosystem = selectedChain.ecosystem;
-                        const network = selectedChain.networkType
-                        let link =`${selectedChain.blockExplorerUrl}`;
+                        const ecosystem = selectedChain.ecosystem;
+                        const network = selectedChain.networkType;
+                        let link = `${selectedChain.blockExplorerUrl}`;
                         if (ecosystem === 'evm') {
                           link += `/tx/${tx.txHash}`;
                         }else if (ecosystem === 'solana') {
@@ -691,7 +853,7 @@ export default function AppPage() {
           </div>
         </main>
 
-        <CocoChatModal
+        <CocoChatDrawer
           isOpen={showCocoChat}
           onClose={() => setShowCocoChat(false)}
           context={{ ecosystem: selectedChain?.ecosystem, chainId: selectedChain?.id }}
@@ -800,28 +962,55 @@ export default function AppPage() {
                     <h2 className="text-sm font-semibold text-coco-text-primary">Transactions</h2>
                   </div>
                   <div className="flex-1 overflow-y-auto">
-                    {transactions.map((tx) => (
-                      <button
+                    {transactions.map((tx, index) => (
+                      <div
                         key={tx.id}
+                        draggable={true}
+                        onDragStart={(e) => {
+                          setDraggedTxIndex(index);
+                          e.dataTransfer.effectAllowed = 'move';
+                          e.dataTransfer.setData('text/plain', String(index));
+                        }}
+                        onDragOver={(e) => {
+                          e.preventDefault();
+                          e.dataTransfer.dropEffect = 'move';
+                          e.currentTarget.classList.add('bg-coco-accent/10');
+                        }}
+                        onDragLeave={(e) => {
+                          e.currentTarget.classList.remove('bg-coco-accent/10');
+                        }}
+                        onDrop={(e) => {
+                          e.preventDefault();
+                          e.currentTarget.classList.remove('bg-coco-accent/10');
+                          if (draggedTxIndex !== null && draggedTxIndex !== index) {
+                            reorderTransactions(draggedTxIndex, index);
+                          }
+                          setDraggedTxIndex(null);
+                        }}
+                        onDragEnd={() => setDraggedTxIndex(null)}
                         onClick={() => {
                           selectTransaction(tx);
                           setSelectedContract(null);
                         }}
                         className={clsx(
-                          'w-full px-4 py-2 text-left border-b border-coco-border-subtle',
-                          'transition-all duration-base',
+                          'w-full px-2 py-2 text-left border-b border-coco-border-subtle cursor-pointer',
+                          'transition-all duration-base flex items-center gap-1',
                           selectedTransaction?.id === tx.id
                             ? 'bg-coco-bg-tertiary border-l-2 border-l-coco-accent'
-                            : 'hover:bg-coco-bg-secondary'
+                            : 'hover:bg-coco-bg-secondary',
+                          draggedTxIndex === index && 'opacity-50'
                         )}
                       >
-                        <div className="flex items-center gap-2">
+                        <div className="cursor-grab active:cursor-grabbing p-1 text-coco-text-tertiary hover:text-coco-text-secondary">
+                          <GripVertical className="w-4 h-4" />
+                        </div>
+                        <div className="flex items-center gap-2 flex-1 min-w-0">
                           <span className="w-2 h-2 rounded-full bg-coco-success flex-shrink-0" />
                           <span className="text-sm font-medium text-coco-text-primary truncate">
                             {tx.name || tx.id.slice(0, 10)}
                           </span>
                         </div>
-                      </button>
+                      </div>
                     ))}
                   </div>
                   <button
@@ -881,7 +1070,7 @@ export default function AppPage() {
           {/* Scripts Tab Content */}
           {workspaceTab === 'scripts' && currentWorkspace && (
             <main className="flex-1 p-6 overflow-y-auto">
-              <ScriptList workspaceId={currentWorkspace.id} />
+              <ScriptList workspaceId={currentWorkspace.id} ecosystem={selectedChain?.ecosystem} />
             </main>
           )}
 
@@ -1012,7 +1201,7 @@ export default function AppPage() {
           }}
         />
 
-        <CocoChatModal
+        <CocoChatDrawer
           isOpen={showCocoChat}
           onClose={() => setShowCocoChat(false)}
           context={{ ecosystem: selectedChain?.ecosystem, chainId: selectedChain?.id }}
@@ -1032,4 +1221,35 @@ function getNetworkName(rpcUrl: string): string | null {
   if (url.includes('devnet')) return 'Devnet';
   if (url.includes('testnet')) return 'Testnet';
   return null;
+}
+
+function getTimeSince(dateStr: string): string {
+  const date = new Date(dateStr);
+  const now = new Date();
+  const diffMs = now.getTime() - date.getTime();
+  const diffMins = Math.floor(diffMs / (1000 * 60));
+  const diffHours = Math.floor(diffMs / (1000 * 60 * 60));
+  const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
+
+  if (diffMins < 1) return 'Just now';
+  if (diffMins < 60) return `${diffMins}m ago`;
+  if (diffHours < 24) return `${diffHours}h ago`;
+  if (diffDays === 1) return 'Yesterday';
+  if (diffDays < 7) return `${diffDays}d ago`;
+  return date.toLocaleDateString();
+}
+
+function getEcosystemColor(ecosystem?: string): { bg: string; text: string } {
+  switch (ecosystem) {
+    case 'evm':
+      return { bg: 'bg-blue-500/10', text: 'text-blue-500' };
+    case 'solana':
+      return { bg: 'bg-purple-500/10', text: 'text-purple-500' };
+    case 'aptos':
+      return { bg: 'bg-cyan-500/10', text: 'text-cyan-500' };
+    case 'sui':
+      return { bg: 'bg-sky-500/10', text: 'text-sky-500' };
+    default:
+      return { bg: 'bg-coco-accent/10', text: 'text-coco-accent' };
+  }
 }

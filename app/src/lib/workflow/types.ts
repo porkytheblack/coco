@@ -118,11 +118,23 @@ export type TransactionNode = z.infer<typeof TransactionNodeSchema>;
 // Script Node
 // ============================================================================
 
+// Output extraction from script logs using regex
+export const ScriptOutputExtractionSchema = z.object({
+  name: z.string(), // Variable name to store the extracted value
+  pattern: z.string(), // Regex pattern with capturing group
+  matchGroup: z.number().default(1), // Which capture group to use (default: 1)
+  type: z.enum(['string', 'number', 'boolean', 'json']).default('string'), // Type coercion
+});
+
+export type ScriptOutputExtraction = z.infer<typeof ScriptOutputExtractionSchema>;
+
 export const ScriptNodeConfigSchema = z.object({
   scriptId: z.string(),
   flags: z.record(z.string(), z.string()).optional(), // Can reference variables
   envVarKeys: z.array(z.string()).optional(),
   outputVariable: z.string().optional(),
+  // Output extractions - extract values from script output logs using regex
+  extractions: z.array(ScriptOutputExtractionSchema).optional(),
 });
 
 export type ScriptNodeConfig = z.infer<typeof ScriptNodeConfigSchema>;

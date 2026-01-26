@@ -3,6 +3,7 @@
 import { useState, useCallback, useRef } from 'react';
 import type { WorkflowNode, WorkflowEdge, WorkflowDefinition, WorkflowNodeType } from '@/lib/workflow/types';
 import { createNode } from './workflow-toolbar';
+import { NodeContextMenu } from './node-context-menu';
 
 // ============================================================================
 // Types
@@ -25,15 +26,26 @@ interface ConnectionState {
   sourceHandle: string | null;
 }
 
+interface ContextMenuState {
+  nodeId: string | null;
+  position: { x: number; y: number } | null;
+}
+
 interface WorkflowCanvasProps {
   definition: WorkflowDefinition;
   selectedNodeId: string | null;
   onNodeSelect: (nodeId: string | null) => void;
   onNodeMove: (nodeId: string, x: number, y: number) => void;
   onNodeAdd: (node: WorkflowNode) => void;
+  onNodeDelete?: (nodeId: string) => void;
   onEdgeAdd: (edge: WorkflowEdge) => void;
   onEdgeDelete: (edgeId: string) => void;
   nodeStatus?: Record<string, 'pending' | 'running' | 'completed' | 'failed' | 'skipped'>;
+  // Execution mode callbacks
+  onRunSingleNode?: (nodeId: string) => void;
+  onRunUpToNode?: (nodeId: string) => void;
+  onResumeFromNode?: (nodeId: string) => void;
+  canResume?: boolean;
 }
 
 // ============================================================================
@@ -71,9 +83,14 @@ export function WorkflowCanvas({
   onNodeSelect,
   onNodeMove,
   onNodeAdd,
+  onNodeDelete,
   onEdgeAdd,
   onEdgeDelete,
   nodeStatus = {},
+  onRunSingleNode,
+  onRunUpToNode,
+  onResumeFromNode,
+  canResume = false,
 }: WorkflowCanvasProps) {
   const canvasRef = useRef<HTMLDivElement>(null);
   const [canvas, setCanvas] = useState<CanvasState>({ zoom: 1, panX: 0, panY: 0 });
@@ -82,6 +99,23 @@ export function WorkflowCanvas({
   const [tempConnectionEnd, setTempConnectionEnd] = useState<{ x: number; y: number } | null>(null);
   const [isPanning, setIsPanning] = useState(false);
   const [panStart, setPanStart] = useState({ x: 0, y: 0 });
+  const [contextMenu, setContextMenu] = useState<ContextMenuState>({ nodeId: null, position: null });
+  const [isDragOver, setIsDragOver] = useState(false);
+
+  // Handle node right-click for context menu
+  const handleNodeContextMenu = useCallback((nodeId: string, e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setContextMenu({
+      nodeId,
+      position: { x: e.clientX, y: e.clientY },
+    });
+  }, []);
+
+  // Close context menu
+  const closeContextMenu = useCallback(() => {
+    setContextMenu({ nodeId: null, position: null });
+  }, []);
 
   // Handle mouse wheel for zoom
   // Handle mouse wheel for zoom and pan
@@ -110,28 +144,75 @@ export function WorkflowCanvas({
     }
   }, []);
 
-  // Handle drop
+  // Handle drag enter
+  const onDragEnter = useCallback((event: React.DragEvent) => {
+    event.preventDefault();
+    event.stopPropagation();
+    console.log('[Canvas] Drag enter event');
+    setIsDragOver(true);
+  }, []);
+
+  // Handle drag over
   const onDragOver = useCallback((event: React.DragEvent) => {
     event.preventDefault();
+    event.stopPropagation();
     event.dataTransfer.dropEffect = 'move';
+  }, []);
+
+  const onDragLeave = useCallback((event: React.DragEvent) => {
+    // Only set false if we're leaving the canvas (not entering a child)
+    const rect = canvasRef.current?.getBoundingClientRect();
+    if (rect) {
+      const { clientX, clientY } = event;
+      if (
+        clientX <= rect.left ||
+        clientX >= rect.right ||
+        clientY <= rect.top ||
+        clientY >= rect.bottom
+      ) {
+        console.log('[Canvas] Drag left canvas');
+        setIsDragOver(false);
+      }
+    }
   }, []);
 
   const onDrop = useCallback((event: React.DragEvent) => {
     event.preventDefault();
-    const type = event.dataTransfer.getData('application/reactflow') as WorkflowNodeType;
-    
+    event.stopPropagation();
+    setIsDragOver(false);
+
+    // Reset panning state to prevent interference
+    setIsPanning(false);
+
+    console.log('[Canvas] Drop event received');
+    console.log('[Canvas] Available types:', event.dataTransfer.types);
+
+    // Try to get the type from multiple data formats
+    let type = event.dataTransfer.getData('application/reactflow') as WorkflowNodeType;
+    console.log('[Canvas] application/reactflow data:', type);
+
+    if (!type) {
+      type = event.dataTransfer.getData('text/plain') as WorkflowNodeType;
+      console.log('[Canvas] text/plain data:', type);
+    }
+
     // Validate type
-    if (!type || !['start', 'end', 'transaction', 'script', 'predicate', 'adapter', 'transform', 'logging'].includes(type as string)) return;
+    const validTypes = ['start', 'end', 'transaction', 'script', 'predicate', 'adapter', 'transform', 'logging'];
+    if (!type || !validTypes.includes(type)) {
+      console.log('[Canvas] Invalid or missing node type:', type);
+      return;
+    }
 
     const rect = canvasRef.current?.getBoundingClientRect();
     if (rect) {
         const x = (event.clientX - rect.left - canvas.panX) / canvas.zoom;
         const y = (event.clientY - rect.top - canvas.panY) / canvas.zoom;
-        
+
         // Center the node on cursor (approx)
         const centeredX = x - NODE_WIDTH / 2;
         const centeredY = y - NODE_HEIGHT / 2;
 
+        console.log('[Canvas] Creating node at:', { x: centeredX, y: centeredY });
         const newNode = createNode(type, { x: centeredX, y: centeredY });
         onNodeAdd(newNode);
     }
@@ -306,14 +387,16 @@ export function WorkflowCanvas({
   return (
     <div
       ref={canvasRef}
-      className="relative w-full h-full bg-coco-bg-primary overflow-hidden cursor-grab"
+      className={`relative w-full h-full bg-coco-bg-primary overflow-hidden cursor-grab transition-colors ${isDragOver ? 'bg-coco-accent/5 ring-2 ring-inset ring-coco-accent/30' : ''}`}
       onWheel={handleWheel}
       onClick={handleCanvasClick}
       onMouseDown={handleCanvasMouseDown}
       onMouseMove={handleMouseMove}
       onMouseUp={handleMouseUp}
       onMouseLeave={handleMouseUp}
+      onDragEnter={onDragEnter}
       onDragOver={onDragOver}
+      onDragLeave={onDragLeave}
       onDrop={onDrop}
       style={{ cursor: isPanning ? 'grabbing' : drag.nodeId ? 'move' : 'grab' }}
     >
@@ -352,13 +435,13 @@ export function WorkflowCanvas({
               className="text-coco-text-tertiary"
               markerEnd="url(#arrowhead)"
             />
-            {/* Clickable area for edge deletion */}
+            {/* Clickable area for edge deletion - disable during drag to allow drops */}
             <path
               d={getEdgePath(edge)}
               fill="none"
               stroke="transparent"
               strokeWidth="20"
-              className="pointer-events-auto cursor-pointer"
+              className={`${isDragOver ? 'pointer-events-none' : 'pointer-events-auto cursor-pointer'}`}
               onClick={() => onEdgeDelete(edge.id)}
             />
           </g>
@@ -381,7 +464,7 @@ export function WorkflowCanvas({
 
       {/* Nodes */}
       <div
-        className="absolute"
+        className="absolute pointer-events-none"
         style={{
           transform: `translate(${canvas.panX}px, ${canvas.panY}px) scale(${canvas.zoom})`,
           transformOrigin: '0 0',
@@ -395,7 +478,7 @@ export function WorkflowCanvas({
             <div
               key={node.id}
               className={`
-                absolute rounded-lg border-2 transition-shadow
+                absolute rounded-lg border-2 transition-shadow pointer-events-auto
                 ${colors.bg} ${colors.border}
                 ${isSelected ? 'ring-2 ring-coco-accent ring-offset-2 ring-offset-coco-bg-primary' : ''}
                 ${nodeStatus[node.id] === 'running' ? 'animate-pulse ring-2 ring-blue-400 ring-offset-2' : ''}
@@ -413,6 +496,18 @@ export function WorkflowCanvas({
                 onNodeSelect(node.id);
               }}
               onMouseDown={(e) => handleNodeDragStart(node.id, e)}
+              onContextMenu={(e) => handleNodeContextMenu(node.id, e)}
+              onDragOver={(e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                e.dataTransfer.dropEffect = 'move';
+              }}
+              onDrop={(e) => {
+                // Forward drop to canvas handler
+                e.preventDefault();
+                e.stopPropagation();
+                onDrop(e);
+              }}
             >
               {/* Node content */}
               <div className="flex items-center justify-center h-full px-3">
@@ -475,6 +570,34 @@ export function WorkflowCanvas({
           +
         </button>
       </div>
+
+      {/* Context Menu */}
+      {contextMenu.nodeId && contextMenu.position && (() => {
+        const node = definition.nodes.find(n => n.id === contextMenu.nodeId);
+        if (!node) return null;
+
+        // Determine if this node can be deleted
+        // Only protect the very first start/end nodes (with specific IDs)
+        // Allow deleting extra/duplicate start/end nodes
+        const isProtectedStartEnd = (node.id === 'start' || node.id === 'end');
+        const canDelete = !isProtectedStartEnd && onNodeDelete !== undefined;
+
+        return (
+          <NodeContextMenu
+            position={contextMenu.position}
+            nodeId={contextMenu.nodeId}
+            nodeName={node.label || node.type}
+            nodeType={node.type}
+            canResume={canResume}
+            canDelete={canDelete}
+            onRunSingle={onRunSingleNode || (() => {})}
+            onRunUpTo={onRunUpToNode || (() => {})}
+            onResumeFrom={onResumeFromNode}
+            onDelete={onNodeDelete}
+            onClose={closeContextMenu}
+          />
+        );
+      })()}
     </div>
   );
 }

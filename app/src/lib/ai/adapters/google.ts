@@ -10,7 +10,7 @@ export class GoogleAdapter extends BaseAIAdapter {
   }
 
   async chat(messages: ChatMessage[], context?: AIContext): Promise<string> {
-    const systemPrompt = this.buildSystemPrompt(context);
+    const systemPrompt = this.buildSystemPrompt(context, context?.enableActions);
 
     // Convert to Gemini format
     const contents = messages
@@ -34,6 +34,7 @@ export class GoogleAdapter extends BaseAIAdapter {
           },
           generationConfig: {
             maxOutputTokens: 16384,
+            temperature: 0.3,
           },
         }),
       }
