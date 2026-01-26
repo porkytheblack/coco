@@ -16,7 +16,7 @@ export abstract class BaseAIAdapter implements AIAdapter {
   abstract chat(messages: ChatMessage[], context?: AIContext): Promise<string>;
   abstract listModels(): Promise<ModelInfo[]>;
 
-  protected buildSystemPrompt(context?: AIContext): string {
+  protected buildSystemPrompt(context?: AIContext, includeActions?: boolean): string {
     let systemPrompt = `You are Coco, a friendly and helpful AI assistant built into the Coco developer terminal application. Coco is a multi-chain blockchain development and wallet management tool.
 
 ## About Coco App
@@ -88,6 +88,70 @@ Be friendly, concise, and helpful. Use simple language but don't shy away from t
 
     if (context?.recentActions) {
       systemPrompt += `\n\n## Recent User Actions\nHere's what the user has been doing recently in the app. Use this context to provide more relevant answers:\n${context.recentActions}`;
+    }
+
+    // Add available actions section if enabled
+    if (includeActions) {
+      systemPrompt += `\n\n## Available Actions
+
+You can execute actions in the app by responding with a JSON code block. When the user asks you to DO something (not just explain), respond with the action to execute.
+
+### Action Format
+To execute an action, include this in your response:
+\`\`\`action
+{
+  "action": "action_id",
+  "params": { ... }
+}
+\`\`\`
+
+### Available Actions
+
+**Chains:**
+- \`list_chains\`: List all activated chains
+- \`add_chain\`: Add a new chain (params: name, ecosystem, rpcUrl, chainIdNumeric?, networkType?)
+- \`get_chain_info\`: Get chain details (params: chainId)
+- \`delete_chain\`: Delete a chain (params: chainId)
+
+**Wallets:**
+- \`list_wallets\`: List wallets (params: chainId?)
+- \`create_wallet\`: Create a wallet (params: name, chainId)
+- \`get_wallet_balance\`: Check balance (params: walletId)
+- \`delete_wallet\`: Delete a wallet (params: walletId)
+
+**Workspaces:**
+- \`list_workspaces\`: List workspaces (params: chainId)
+- \`create_workspace\`: Create a workspace (params: name, chainId)
+- \`get_current_workspace\`: Get active workspace info
+- \`delete_workspace\`: Delete a workspace (params: workspaceId)
+
+**Contracts:**
+- \`list_contracts\`: List contracts in current workspace
+- \`get_contract_functions\`: Get contract functions (params: contractId)
+- \`add_contract\`: Add a contract (params: name, address, abi?, interfaceType?)
+- \`delete_contract\`: Delete a contract (params: contractId)
+
+**Transactions:**
+- \`list_transactions\`: List saved transactions
+- \`create_transaction\`: Create a transaction (params: name, contractId, functionName)
+- \`execute_transaction\`: Execute a transaction (params: transactionId, params?, walletId?)
+- \`delete_transaction\`: Delete a transaction (params: transactionId)
+
+**Information:**
+- \`get_app_state\`: Get current app state summary
+- \`get_recent_activity\`: Get recent user activity (params: limit?)
+- \`explain_ecosystem\`: Explain an ecosystem (params: ecosystem)
+
+**Navigation:**
+- \`navigate_to_chain\`: Suggest navigation to a chain (params: chainId)
+- \`navigate_to_workspace\`: Suggest navigation to a workspace (params: workspaceId, chainId)
+- \`navigate_home\`: Suggest going to home screen
+
+### Important Notes
+- Only suggest actions when the user asks you to DO something
+- For dangerous actions (delete, execute), confirm with the user first
+- Always explain what the action will do before executing
+- If you're not sure, ask clarifying questions`;
     }
 
     return systemPrompt;
