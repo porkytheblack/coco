@@ -1,12 +1,12 @@
 'use client';
 
-import { useState, useRef, useEffect } from 'react';
+import { useState, useRef, useEffect, useMemo } from 'react';
 import { ChevronLeft, ChevronRight, ChevronUp, ChevronDown, Send, Loader2 } from 'lucide-react';
 import Image from 'next/image';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { Modal } from '@/components/ui';
-import { useAIStore } from '@/stores';
+import { useAIStore, useActionTrackingStore } from '@/stores';
 import { aiService } from '@/lib/ai';
 import type { AIContext } from '@/types';
 
@@ -27,9 +27,33 @@ export function CocoChatModal({ isOpen, onClose, context }: CocoChatModalProps) 
     setProcessing,
   } = useAIStore();
 
+  const { getActionSummary, getActionsForContext } = useActionTrackingStore();
+
   const [input, setInput] = useState('');
   const inputRef = useRef<HTMLInputElement>(null);
   const answerRef = useRef<HTMLDivElement>(null);
+
+  // Build context with recent actions
+  const enrichedContext = useMemo((): AIContext => {
+    const actions = context?.chainId || context?.ecosystem
+      ? getActionsForContext({
+          chainId: context.chainId,
+        })
+      : getActionsForContext({});
+
+    const actionSummary = actions.length > 0
+      ? actions.slice(0, 15).map((a) => {
+          const time = new Date(a.timestamp).toLocaleTimeString();
+          const status = a.result?.success ? '✓' : a.result?.success === false ? '✗' : '';
+          return `[${time}] ${status} ${a.summary}`;
+        }).join('\n')
+      : undefined;
+
+    return {
+      ...context,
+      recentActions: actionSummary,
+    };
+  }, [context, getActionsForContext]);
 
   // Auto-focus input when modal opens
   useEffect(() => {
@@ -60,7 +84,7 @@ export function CocoChatModal({ isOpen, onClose, context }: CocoChatModalProps) 
     try {
       const currentConfig = settings.providers[settings.provider];
       aiService.setAdapter(settings.provider, currentConfig);
-      const response = await aiService.chat(userMessage, context);
+      const response = await aiService.chat(userMessage, enrichedContext);
       addMessage({ role: 'assistant', content: response });
     } catch (error) {
       addMessage({

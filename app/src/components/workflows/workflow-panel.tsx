@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { X, Play, Code, GitBranch, Database, Wrench, Key, Copy, Check, Plus, Trash, Info, AlertTriangle, AlertCircle, Save } from 'lucide-react';
+import { X, Play, Code, GitBranch, Database, Wrench, Key, Copy, Check, Plus, Trash, Info, AlertTriangle, AlertCircle, Save, FastForward } from 'lucide-react';
 import { useEnvVars } from '@/hooks/use-env-vars';
 import { slugify } from '@/lib/workflow/engine';
 import type { 
@@ -33,6 +33,10 @@ interface WorkflowPanelProps {
   definition: { nodes: WorkflowNode[]; edges: WorkflowEdge[] };
   onSave?: () => void;
   isSaving?: boolean;
+  // Execution mode callbacks
+  onRunSingleNode?: (nodeId: string) => void;
+  onRunUpToNode?: (nodeId: string) => void;
+  isExecuting?: boolean;
 }
 
 // ============================================================================
@@ -70,6 +74,9 @@ export function WorkflowPanel({
   definition,
   onSave,
   isSaving = false,
+  onRunSingleNode,
+  onRunUpToNode,
+  isExecuting = false,
 }: WorkflowPanelProps) {
   if (!node) return null;
 
@@ -172,6 +179,36 @@ export function WorkflowPanel({
       {/* Footer */}
       {(node.type !== 'start' && node.type !== 'end' || onSave) && (
         <div className="p-4 border-t border-coco-border-subtle space-y-2 bg-coco-bg-elevated sticky bottom-0 z-10 transition-shadow">
+          {/* Execution buttons for non-start/end nodes */}
+          {node.type !== 'start' && node.type !== 'end' && (onRunSingleNode || onRunUpToNode) && (
+            <div className="flex gap-2 mb-2">
+              {onRunSingleNode && (
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  onClick={() => onRunSingleNode(node.id)}
+                  disabled={isExecuting}
+                  className="flex-1"
+                >
+                  <Play className="w-3.5 h-3.5 mr-1.5 text-emerald-500" />
+                  Run Node
+                </Button>
+              )}
+              {onRunUpToNode && (
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  onClick={() => onRunUpToNode(node.id)}
+                  disabled={isExecuting}
+                  className="flex-1"
+                >
+                  <FastForward className="w-3.5 h-3.5 mr-1.5 text-blue-500" />
+                  Run Up To
+                </Button>
+              )}
+            </div>
+          )}
+
           {onSave && (
             <Button
               variant="primary"
@@ -192,7 +229,7 @@ export function WorkflowPanel({
               )}
             </Button>
           )}
-          
+
           {node.type !== 'start' && node.type !== 'end' && (
             <Button
               variant="danger"

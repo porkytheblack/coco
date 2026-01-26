@@ -237,22 +237,58 @@ export default function AppPage() {
                 {recentWorkspaces.slice(0, 6).map((recent) => {
                   const chain = chains.find(c => c.id === recent.chainId);
                   const timeSince = getTimeSince(recent.accessedAt);
+                  const networkType = chain?.networkType;
+                  const ecosystemColor = getEcosystemColor(chain?.ecosystem);
+
                   return (
                     <button
                       key={recent.workspaceId}
                       onClick={() => navigate({ view: 'workspace', chainId: recent.chainId, workspaceId: recent.workspaceId })}
-                      className="flex items-center gap-3 p-3 bg-coco-bg-secondary border border-coco-border-subtle rounded-lg hover:border-coco-accent/50 hover:bg-coco-bg-tertiary transition-all text-left group"
+                      className="flex items-start gap-3 p-3 bg-coco-bg-secondary border border-coco-border-subtle rounded-xl hover:border-coco-accent/50 hover:bg-coco-bg-tertiary hover:shadow-md transition-all text-left group"
                     >
-                      <div className="w-8 h-8 rounded-lg bg-coco-accent/10 flex items-center justify-center flex-shrink-0">
-                        <Rocket className="w-4 h-4 text-coco-accent" />
+                      {/* Chain Icon */}
+                      <div className={clsx(
+                        'w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0 transition-transform group-hover:scale-105',
+                        ecosystemColor.bg
+                      )}>
+                        {chain?.iconId ? (
+                          <Image
+                            src={`/chains/${chain.iconId}.svg`}
+                            alt={chain.name}
+                            width={24}
+                            height={24}
+                            className="object-contain"
+                            onError={(e) => {
+                              (e.target as HTMLImageElement).style.display = 'none';
+                            }}
+                          />
+                        ) : (
+                          <Rocket className={clsx('w-5 h-5', ecosystemColor.text)} />
+                        )}
                       </div>
+
                       <div className="min-w-0 flex-1">
-                        <p className="font-medium text-coco-text-primary truncate text-sm">
+                        <p className="font-medium text-coco-text-primary truncate text-sm group-hover:text-coco-accent transition-colors">
                           {recent.name}
                         </p>
-                        <p className="text-xs text-coco-text-tertiary truncate">
-                          {chain?.name || 'Unknown chain'} · {timeSince}
+                        <p className="text-xs text-coco-text-tertiary truncate mt-0.5">
+                          {chain?.name || 'Unknown chain'}
                         </p>
+                        <div className="flex items-center gap-2 mt-1.5">
+                          {networkType && (
+                            <span className={clsx(
+                              'text-[10px] px-1.5 py-0.5 rounded-full font-medium',
+                              networkType === 'mainnet'
+                                ? 'bg-green-500/10 text-green-500'
+                                : 'bg-amber-500/10 text-amber-500'
+                            )}>
+                              {networkType}
+                            </span>
+                          )}
+                          <span className="text-[10px] text-coco-text-tertiary">
+                            {timeSince}
+                          </span>
+                        </div>
                       </div>
                     </button>
                   );
@@ -1090,4 +1126,19 @@ function getTimeSince(dateStr: string): string {
   if (diffDays === 1) return 'Yesterday';
   if (diffDays < 7) return `${diffDays}d ago`;
   return date.toLocaleDateString();
+}
+
+function getEcosystemColor(ecosystem?: string): { bg: string; text: string } {
+  switch (ecosystem) {
+    case 'evm':
+      return { bg: 'bg-blue-500/10', text: 'text-blue-500' };
+    case 'solana':
+      return { bg: 'bg-purple-500/10', text: 'text-purple-500' };
+    case 'aptos':
+      return { bg: 'bg-cyan-500/10', text: 'text-cyan-500' };
+    case 'sui':
+      return { bg: 'bg-sky-500/10', text: 'text-sky-500' };
+    default:
+      return { bg: 'bg-coco-accent/10', text: 'text-coco-accent' };
+  }
 }

@@ -336,6 +336,9 @@ export interface AIContext {
   transactionId?: string;
   errorMessage?: string;
   sourceCode?: string;
+  // Recent user actions for context
+  recentActions?: string;
+  workspaceId?: string;
 }
 
 export interface AISettings {

@@ -3,6 +3,7 @@
 import { useState, useCallback, useRef } from 'react';
 import type { WorkflowNode, WorkflowEdge, WorkflowDefinition, WorkflowNodeType } from '@/lib/workflow/types';
 import { createNode } from './workflow-toolbar';
+import { NodeContextMenu } from './node-context-menu';
 
 // ============================================================================
 // Types
@@ -25,6 +26,11 @@ interface ConnectionState {
   sourceHandle: string | null;
 }
 
+interface ContextMenuState {
+  nodeId: string | null;
+  position: { x: number; y: number } | null;
+}
+
 interface WorkflowCanvasProps {
   definition: WorkflowDefinition;
   selectedNodeId: string | null;
@@ -34,6 +40,11 @@ interface WorkflowCanvasProps {
   onEdgeAdd: (edge: WorkflowEdge) => void;
   onEdgeDelete: (edgeId: string) => void;
   nodeStatus?: Record<string, 'pending' | 'running' | 'completed' | 'failed' | 'skipped'>;
+  // Execution mode callbacks
+  onRunSingleNode?: (nodeId: string) => void;
+  onRunUpToNode?: (nodeId: string) => void;
+  onResumeFromNode?: (nodeId: string) => void;
+  canResume?: boolean;
 }
 
 // ============================================================================
@@ -74,6 +85,10 @@ export function WorkflowCanvas({
   onEdgeAdd,
   onEdgeDelete,
   nodeStatus = {},
+  onRunSingleNode,
+  onRunUpToNode,
+  onResumeFromNode,
+  canResume = false,
 }: WorkflowCanvasProps) {
   const canvasRef = useRef<HTMLDivElement>(null);
   const [canvas, setCanvas] = useState<CanvasState>({ zoom: 1, panX: 0, panY: 0 });
@@ -82,6 +97,22 @@ export function WorkflowCanvas({
   const [tempConnectionEnd, setTempConnectionEnd] = useState<{ x: number; y: number } | null>(null);
   const [isPanning, setIsPanning] = useState(false);
   const [panStart, setPanStart] = useState({ x: 0, y: 0 });
+  const [contextMenu, setContextMenu] = useState<ContextMenuState>({ nodeId: null, position: null });
+
+  // Handle node right-click for context menu
+  const handleNodeContextMenu = useCallback((nodeId: string, e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setContextMenu({
+      nodeId,
+      position: { x: e.clientX, y: e.clientY },
+    });
+  }, []);
+
+  // Close context menu
+  const closeContextMenu = useCallback(() => {
+    setContextMenu({ nodeId: null, position: null });
+  }, []);
 
   // Handle mouse wheel for zoom
   // Handle mouse wheel for zoom and pan
@@ -413,6 +444,7 @@ export function WorkflowCanvas({
                 onNodeSelect(node.id);
               }}
               onMouseDown={(e) => handleNodeDragStart(node.id, e)}
+              onContextMenu={(e) => handleNodeContextMenu(node.id, e)}
             >
               {/* Node content */}
               <div className="flex items-center justify-center h-full px-3">
@@ -475,6 +507,25 @@ export function WorkflowCanvas({
           +
         </button>
       </div>
+
+      {/* Context Menu */}
+      {contextMenu.nodeId && contextMenu.position && (() => {
+        const node = definition.nodes.find(n => n.id === contextMenu.nodeId);
+        if (!node) return null;
+        return (
+          <NodeContextMenu
+            position={contextMenu.position}
+            nodeId={contextMenu.nodeId}
+            nodeName={node.label || node.type}
+            nodeType={node.type}
+            canResume={canResume}
+            onRunSingle={onRunSingleNode || (() => {})}
+            onRunUpTo={onRunUpToNode || (() => {})}
+            onResumeFrom={onResumeFromNode}
+            onClose={closeContextMenu}
+          />
+        );
+      })()}
     </div>
   );
 }

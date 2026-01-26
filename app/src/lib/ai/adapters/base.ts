@@ -86,6 +86,10 @@ Be friendly, concise, and helpful. Use simple language but don't shy away from t
       systemPrompt += `\n\n## Source Code Context\n\`\`\`\n${context.sourceCode}\n\`\`\``;
     }
 
+    if (context?.recentActions) {
+      systemPrompt += `\n\n## Recent User Actions\nHere's what the user has been doing recently in the app. Use this context to provide more relevant answers:\n${context.recentActions}`;
+    }
+
     return systemPrompt;
   }
 }
