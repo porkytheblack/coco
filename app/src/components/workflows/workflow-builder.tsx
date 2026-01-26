@@ -723,6 +723,7 @@ export function WorkflowBuilder({
               onNodeSelect={handleNodeSelect}
               onNodeMove={handleNodeMove}
               onNodeAdd={handleNodeAdd}
+              onNodeDelete={handleNodeDelete}
               onEdgeAdd={handleEdgeAdd}
               onEdgeDelete={handleEdgeDelete}
               nodeStatus={nodeStatus}

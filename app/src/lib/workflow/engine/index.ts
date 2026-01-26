@@ -12,6 +12,7 @@ import type {
   AdapterNode,
   TransformNode,
   LoggingNode,
+  ScriptOutputExtraction,
 } from '../types';
 import {
   isStartNode,
@@ -351,6 +352,60 @@ function executeTransactionNode(
   );
 }
 
+/**
+ * Extract values from script output using regex patterns.
+ */
+function extractScriptOutputValues(
+  output: string | undefined,
+  extractions: ScriptOutputExtraction[] | undefined
+): Record<string, unknown> {
+  const extracted: Record<string, unknown> = {};
+
+  if (!output || !extractions || extractions.length === 0) {
+    return extracted;
+  }
+
+  for (const extraction of extractions) {
+    try {
+      const regex = new RegExp(extraction.pattern, 'gm');
+      const match = regex.exec(output);
+
+      if (match) {
+        const matchGroup = extraction.matchGroup ?? 1;
+        const rawValue = match[matchGroup] ?? match[0];
+
+        // Type coercion based on extraction type
+        let value: unknown = rawValue;
+        switch (extraction.type) {
+          case 'number':
+            value = parseFloat(rawValue);
+            if (isNaN(value as number)) value = 0;
+            break;
+          case 'boolean':
+            value = rawValue.toLowerCase() === 'true' || rawValue === '1';
+            break;
+          case 'json':
+            try {
+              value = JSON.parse(rawValue);
+            } catch {
+              value = rawValue;
+            }
+            break;
+          case 'string':
+          default:
+            value = rawValue;
+        }
+
+        extracted[extraction.name] = value;
+      }
+    } catch (e) {
+      console.warn(`Failed to extract "${extraction.name}" with pattern "${extraction.pattern}":`, e);
+    }
+  }
+
+  return extracted;
+}
+
 function executeScriptNode(
   node: ScriptNode,
   ctx: ExecutionContext
@@ -365,12 +420,26 @@ function executeScriptNode(
             resolvedFlags,
             node.config.envVarKeys
           );
-          
+
+          // Extract values from script output using configured patterns
+          const extractedValues = extractScriptOutputValues(
+            result.output,
+            node.config.extractions
+          );
+
+          // Build structured output with is_success and extractions
+          const structuredOutput = {
+            is_success: result.success,
+            output: result.output,
+            error: result.error,
+            ...extractedValues,
+          };
+
           if (!result.success) {
             throw new Error(result.error || 'Script failed');
           }
-          
-          return result;
+
+          return structuredOutput;
         },
         catch: (e) => new WorkflowExecutionError(node.id, `Script execution failed: ${e}`),
       })
@@ -382,6 +451,18 @@ function executeScriptNode(
         }
         setNestedValue(ctx.variables, `${node.id}.result`, result);
         setNestedValue(ctx.variables, `${slugify(node.label || node.type)}.result`, result);
+
+        // Also set each extracted value directly for easy access
+        const nodeSlug = slugify(node.label || node.type);
+        for (const [key, value] of Object.entries(result)) {
+          if (key !== 'is_success' && key !== 'output' && key !== 'error') {
+            setNestedValue(ctx.variables, `${nodeSlug}.${key}`, value);
+            setNestedValue(ctx.variables, `${node.id}.${key}`, value);
+          }
+        }
+        // Also set is_success directly for condition nodes
+        setNestedValue(ctx.variables, `${nodeSlug}.is_success`, result.is_success);
+        setNestedValue(ctx.variables, `${node.id}.is_success`, result.is_success);
       })
     )
   );

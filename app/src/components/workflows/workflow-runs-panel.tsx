@@ -12,7 +12,8 @@ import {
   RefreshCw,
   Bug,
   FileJson,
-  Loader2
+  Loader2,
+  Code
 } from 'lucide-react';
 import { useQueryClient } from '@tanstack/react-query';
 import { useWorkflowRuns, useWorkflow } from '@/hooks/use-workflows';
@@ -20,6 +21,7 @@ import { queryKeys } from '@/lib/react-query';
 import type { WorkflowStepLog, WorkflowRunStatus } from '@/lib/workflow/types';
 import { workflowEvents } from '@/lib/workflow/events';
 import { clsx } from 'clsx';
+import { Terminal } from '@/components/ui';
 
 interface WorkflowRunsPanelProps {
   workflowId: string;
@@ -322,6 +324,31 @@ export function WorkflowRunsPanel({ workflowId, onRunSelect }: WorkflowRunsPanel
 function StepLogItem({ log }: { log: WorkflowStepLog }) {
   const [isOpen, setIsOpen] = useState(false);
 
+  // Check if this is a script node with output logs
+  const isScriptNode = log.nodeType === 'script';
+  const scriptOutput = isScriptNode && log.output
+    ? (typeof log.output === 'object' && log.output !== null)
+      ? (log.output as { output?: string }).output || ''
+      : ''
+    : '';
+
+  // Get extracted values from script output for display
+  const extractedValues: Record<string, string> | null = useMemo(() => {
+    if (!isScriptNode || !log.output || typeof log.output !== 'object') return null;
+    const output = log.output as Record<string, unknown>;
+    const extracted: Record<string, string> = {};
+    for (const [key, value] of Object.entries(output)) {
+      if (key !== 'is_success' && key !== 'output' && key !== 'error') {
+        extracted[key] = value === null || value === undefined
+          ? 'null'
+          : typeof value === 'object'
+          ? JSON.stringify(value)
+          : String(value);
+      }
+    }
+    return Object.keys(extracted).length > 0 ? extracted : null;
+  }, [isScriptNode, log.output]);
+
   return (
     <div className="border border-coco-border-subtle rounded-lg bg-coco-bg-primary overflow-hidden">
       <button
@@ -339,6 +366,11 @@ function StepLogItem({ log }: { log: WorkflowStepLog }) {
           </span>
         </div>
         <div className="flex items-center gap-3">
+          {isScriptNode && scriptOutput && (
+            <span title="Has script logs">
+              <Code className="w-3 h-3 text-green-400" />
+            </span>
+          )}
           {log.error && <span className="text-xs text-rose-400">Failed</span>}
         </div>
       </button>
@@ -353,7 +385,7 @@ function StepLogItem({ log }: { log: WorkflowStepLog }) {
               </pre>
             </div>
           )}
-          
+
           {!!log.input && (
             <div>
               <span className="text-xs font-semibold text-coco-text-secondary block mb-1">Input</span>
@@ -363,7 +395,29 @@ function StepLogItem({ log }: { log: WorkflowStepLog }) {
             </div>
           )}
 
-          {!!log.output && (
+          {/* Script Terminal Output */}
+          {isScriptNode && scriptOutput && (
+            <div>
+              <span className="text-xs font-semibold text-coco-text-secondary block mb-1 flex items-center gap-1.5">
+                <Code className="w-3 h-3 text-green-400" />
+                Script Logs
+              </span>
+              <Terminal
+                lines={scriptOutput.split('\n')}
+                showToolbar
+                title={log.nodeName || 'Script Output'}
+                status={log.status === 'completed' ? 'success' : log.status === 'failed' ? 'error' : 'idle'}
+                maxHeight="200px"
+                enableColors
+              />
+            </div>
+          )}
+
+          {/* Extracted Values */}
+          {extractedValues !== null && <ExtractedValuesDisplay values={extractedValues} />}
+
+          {/* Non-script output */}
+          {!!log.output && !isScriptNode && (
             <div>
               <span className="text-xs font-semibold text-coco-text-secondary block mb-1">Output</span>
               <pre className="text-xs bg-coco-bg-primary p-2 rounded text-coco-text-primary overflow-x-auto">
@@ -371,8 +425,42 @@ function StepLogItem({ log }: { log: WorkflowStepLog }) {
               </pre>
             </div>
           )}
+
+          {/* Script success status */}
+          {isScriptNode && !!log.output && typeof log.output === 'object' && (
+            <div className="flex items-center gap-2 text-xs">
+              <span className="text-coco-text-tertiary">Status:</span>
+              {(log.output as { is_success?: boolean }).is_success ? (
+                <span className="text-emerald-400 flex items-center gap-1">
+                  <CheckCircle className="w-3 h-3" />
+                  Success
+                </span>
+              ) : (
+                <span className="text-rose-400 flex items-center gap-1">
+                  <XCircle className="w-3 h-3" />
+                  Failed
+                </span>
+              )}
+            </div>
+          )}
         </div>
       )}
+    </div>
+  );
+}
+
+function ExtractedValuesDisplay({ values }: { values: Record<string, string> }) {
+  return (
+    <div>
+      <span className="text-xs font-semibold text-emerald-400 block mb-1">Extracted Values</span>
+      <div className="grid gap-1">
+        {Object.entries(values).map(([key, val]) => (
+          <div key={key} className="flex items-center gap-2 text-xs bg-emerald-500/10 px-2 py-1 rounded">
+            <span className="font-mono text-emerald-300">{key}:</span>
+            <span className="text-coco-text-primary font-mono truncate">{val}</span>
+          </div>
+        ))}
+      </div>
     </div>
   );
 }

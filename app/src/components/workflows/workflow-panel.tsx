@@ -2,16 +2,17 @@ import { useState, useEffect } from 'react';
 import { X, Play, Code, GitBranch, Database, Wrench, Key, Copy, Check, Plus, Trash, Info, AlertTriangle, AlertCircle, Save, FastForward } from 'lucide-react';
 import { useEnvVars } from '@/hooks/use-env-vars';
 import { slugify } from '@/lib/workflow/engine';
-import type { 
-  WorkflowNode, 
+import type {
+  WorkflowNode,
   WorkflowEdge,
-  TransactionNode, 
-  ScriptNode, 
-  PredicateNode, 
+  TransactionNode,
+  ScriptNode,
+  PredicateNode,
   AdapterNode,
   TransformNode,
   LoggingNode,
-  PredicateOperator 
+  PredicateOperator,
+  ScriptOutputExtraction,
 } from '@/lib/workflow/types';
 import { Button, IconButton } from '@/components/ui';
 import type { Transaction, Contract } from '@/types';
@@ -375,6 +376,13 @@ function TransactionNodeConfig({
 // Script Node Config
 // ============================================================================
 
+const EXTRACTION_TYPES: { value: ScriptOutputExtraction['type']; label: string }[] = [
+  { value: 'string', label: 'Text' },
+  { value: 'number', label: 'Number' },
+  { value: 'boolean', label: 'Boolean' },
+  { value: 'json', label: 'JSON' },
+];
+
 function ScriptNodeConfig({
   node,
   scripts,
@@ -384,6 +392,43 @@ function ScriptNodeConfig({
   scripts: { id: string; name: string }[];
   onUpdate: (node: WorkflowNode) => void;
 }) {
+  const extractions = node.config.extractions || [];
+
+  const addExtraction = () => {
+    onUpdate({
+      ...node,
+      config: {
+        ...node.config,
+        extractions: [
+          ...extractions,
+          { name: '', pattern: '', matchGroup: 1, type: 'string' as const },
+        ],
+      },
+    });
+  };
+
+  const updateExtraction = (
+    index: number,
+    updates: Partial<ScriptOutputExtraction>
+  ) => {
+    const newExtractions = [...extractions];
+    newExtractions[index] = { ...newExtractions[index], ...updates };
+    onUpdate({
+      ...node,
+      config: { ...node.config, extractions: newExtractions },
+    });
+  };
+
+  const removeExtraction = (index: number) => {
+    onUpdate({
+      ...node,
+      config: {
+        ...node.config,
+        extractions: extractions.filter((_, i) => i !== index),
+      },
+    });
+  };
+
   return (
     <>
       <div>
@@ -392,15 +437,19 @@ function ScriptNodeConfig({
         </label>
         <select
           value={node.config.scriptId}
-          onChange={(e) => onUpdate({
-            ...node,
-            config: { ...node.config, scriptId: e.target.value },
-          })}
+          onChange={(e) =>
+            onUpdate({
+              ...node,
+              config: { ...node.config, scriptId: e.target.value },
+            })
+          }
           className="w-full px-3 py-2 text-sm bg-coco-bg-primary border border-coco-border-default rounded-lg focus:outline-none focus:ring-1 focus:ring-coco-accent"
         >
           <option value="">Select script...</option>
-          {scripts.map(script => (
-            <option key={script.id} value={script.id}>{script.name}</option>
+          {scripts.map((script) => (
+            <option key={script.id} value={script.id}>
+              {script.name}
+            </option>
           ))}
         </select>
       </div>
@@ -412,13 +461,151 @@ function ScriptNodeConfig({
         <input
           type="text"
           value={node.config.outputVariable || ''}
-          onChange={(e) => onUpdate({
-            ...node,
-            config: { ...node.config, outputVariable: e.target.value || undefined },
-          })}
+          onChange={(e) =>
+            onUpdate({
+              ...node,
+              config: {
+                ...node.config,
+                outputVariable: e.target.value || undefined,
+              },
+            })
+          }
           className="w-full px-3 py-2 text-sm bg-coco-bg-primary border border-coco-border-default rounded-lg focus:outline-none focus:ring-1 focus:ring-coco-accent"
           placeholder="e.g., scriptOutput"
         />
+      </div>
+
+      {/* Output Extractions */}
+      <div className="space-y-3 mt-4">
+        <div className="flex items-center justify-between">
+          <div>
+            <label className="text-xs font-semibold text-coco-text-primary">
+              Output Extractions
+            </label>
+            <p className="text-[10px] text-coco-text-tertiary mt-0.5">
+              Extract values from script output using regex
+            </p>
+          </div>
+          <IconButton
+            icon={<Plus className="w-3 h-3" />}
+            variant="default"
+            onClick={addExtraction}
+            label="Add extraction"
+          />
+        </div>
+
+        {extractions.map((extraction, index) => (
+          <div
+            key={index}
+            className="p-3 bg-coco-bg-tertiary/40 rounded-lg border border-coco-border-subtle space-y-2 relative group"
+          >
+            <button
+              onClick={() => removeExtraction(index)}
+              className="absolute top-2 right-2 p-1 text-coco-text-tertiary hover:text-rose-400 opacity-0 group-hover:opacity-100 transition-opacity"
+            >
+              <Trash className="w-3 h-3" />
+            </button>
+
+            <div>
+              <label className="block text-[10px] font-medium text-coco-text-secondary uppercase tracking-wider mb-1">
+                Variable Name
+              </label>
+              <input
+                type="text"
+                value={extraction.name}
+                onChange={(e) =>
+                  updateExtraction(index, { name: e.target.value })
+                }
+                className="w-full px-2 py-1.5 text-xs bg-coco-bg-primary border border-coco-border-default rounded focus:outline-none focus:ring-1 focus:ring-coco-accent font-mono"
+                placeholder="deployedAddress"
+              />
+            </div>
+
+            <div>
+              <label className="block text-[10px] font-medium text-coco-text-secondary uppercase tracking-wider mb-1">
+                Regex Pattern
+              </label>
+              <input
+                type="text"
+                value={extraction.pattern}
+                onChange={(e) =>
+                  updateExtraction(index, { pattern: e.target.value })
+                }
+                className="w-full px-2 py-1.5 text-xs bg-coco-bg-primary border border-coco-border-default rounded focus:outline-none focus:ring-1 focus:ring-coco-accent font-mono"
+                placeholder="Deployed at: (0x[a-fA-F0-9]+)"
+              />
+              <p className="text-[9px] text-coco-text-tertiary mt-1">
+                Use capturing groups () to extract the value
+              </p>
+            </div>
+
+            <div className="flex gap-2">
+              <div className="flex-1">
+                <label className="block text-[10px] font-medium text-coco-text-secondary uppercase tracking-wider mb-1">
+                  Capture Group
+                </label>
+                <input
+                  type="number"
+                  min={0}
+                  value={extraction.matchGroup ?? 1}
+                  onChange={(e) =>
+                    updateExtraction(index, {
+                      matchGroup: parseInt(e.target.value, 10) || 1,
+                    })
+                  }
+                  className="w-full px-2 py-1.5 text-xs bg-coco-bg-primary border border-coco-border-default rounded focus:outline-none focus:ring-1 focus:ring-coco-accent"
+                />
+              </div>
+              <div className="flex-1">
+                <label className="block text-[10px] font-medium text-coco-text-secondary uppercase tracking-wider mb-1">
+                  Type
+                </label>
+                <select
+                  value={extraction.type || 'string'}
+                  onChange={(e) =>
+                    updateExtraction(index, {
+                      type: e.target.value as ScriptOutputExtraction['type'],
+                    })
+                  }
+                  className="w-full px-2 py-1.5 text-xs bg-coco-bg-primary border border-coco-border-default rounded focus:outline-none focus:ring-1 focus:ring-coco-accent"
+                >
+                  {EXTRACTION_TYPES.map((t) => (
+                    <option key={t.value} value={t.value}>
+                      {t.label}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            </div>
+          </div>
+        ))}
+
+        {extractions.length === 0 && (
+          <div className="text-center py-4 px-3 border border-dashed border-coco-border-subtle rounded-lg">
+            <p className="text-xs text-coco-text-tertiary">
+              No extractions configured. Click + to add a pattern.
+            </p>
+          </div>
+        )}
+
+        {/* Help text for available output variables */}
+        {extractions.length > 0 && (
+          <div className="p-2 bg-emerald-500/10 border border-emerald-500/20 rounded-lg">
+            <p className="text-[10px] text-emerald-400 font-medium mb-1">
+              Available in conditions:
+            </p>
+            <code className="text-[9px] text-emerald-300 block">
+              {'{{'}{slugify(node.label || node.type)}.is_success{'}}'}
+            </code>
+            {extractions
+              .filter((e) => e.name)
+              .map((e, i) => (
+                <code key={i} className="text-[9px] text-emerald-300 block mt-0.5">
+                  {'{{'}{slugify(node.label || node.type)}.{e.name}{'}}'}
+                </code>
+              ))}
+          </div>
+        )}
       </div>
     </>
   );

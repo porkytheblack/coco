@@ -136,13 +136,15 @@ export function WorkflowToolbar({ onAddNode, isCollapsed = false, onToggle }: Wo
               </h4>
               <div className="space-y-1">
                 {nodes.map(template => (
-                  <button
+                  <div
                     key={template.type}
-                    draggable
+                    draggable="true"
                     onDragStart={(event) => onDragStart(event, template.type)}
                     onClick={() => onAddNode(template.type)}
-                    className={`w-full flex items-center gap-3 px-3 py-2 rounded-lg text-left hover:bg-coco-bg-tertiary transition-colors group ${isCollapsed ? 'justify-center px-2' : ''}`}
+                    className={`w-full flex items-center gap-3 px-3 py-2 rounded-lg text-left hover:bg-coco-bg-tertiary transition-colors group cursor-grab active:cursor-grabbing select-none ${isCollapsed ? 'justify-center px-2' : ''}`}
                     title={template.description}
+                    role="button"
+                    tabIndex={0}
                   >
                     <div className={`
                       p-1.5 rounded-md
@@ -167,7 +169,7 @@ export function WorkflowToolbar({ onAddNode, isCollapsed = false, onToggle }: Wo
                         </p>
                       </div>
                     )}
-                  </button>
+                  </div>
                 ))}
               </div>
             </div>

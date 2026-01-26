@@ -37,6 +37,7 @@ interface WorkflowCanvasProps {
   onNodeSelect: (nodeId: string | null) => void;
   onNodeMove: (nodeId: string, x: number, y: number) => void;
   onNodeAdd: (node: WorkflowNode) => void;
+  onNodeDelete?: (nodeId: string) => void;
   onEdgeAdd: (edge: WorkflowEdge) => void;
   onEdgeDelete: (edgeId: string) => void;
   nodeStatus?: Record<string, 'pending' | 'running' | 'completed' | 'failed' | 'skipped'>;
@@ -82,6 +83,7 @@ export function WorkflowCanvas({
   onNodeSelect,
   onNodeMove,
   onNodeAdd,
+  onNodeDelete,
   onEdgeAdd,
   onEdgeDelete,
   nodeStatus = {},
@@ -98,6 +100,7 @@ export function WorkflowCanvas({
   const [isPanning, setIsPanning] = useState(false);
   const [panStart, setPanStart] = useState({ x: 0, y: 0 });
   const [contextMenu, setContextMenu] = useState<ContextMenuState>({ nodeId: null, position: null });
+  const [isDragOver, setIsDragOver] = useState(false);
 
   // Handle node right-click for context menu
   const handleNodeContextMenu = useCallback((nodeId: string, e: React.MouseEvent) => {
@@ -144,13 +147,28 @@ export function WorkflowCanvas({
   // Handle drop
   const onDragOver = useCallback((event: React.DragEvent) => {
     event.preventDefault();
+    event.stopPropagation();
     event.dataTransfer.dropEffect = 'move';
+    setIsDragOver(true);
+  }, []);
+
+  const onDragLeave = useCallback((event: React.DragEvent) => {
+    // Only set false if we're leaving the canvas (not entering a child)
+    if (event.currentTarget === event.target) {
+      setIsDragOver(false);
+    }
   }, []);
 
   const onDrop = useCallback((event: React.DragEvent) => {
     event.preventDefault();
+    event.stopPropagation();
+    setIsDragOver(false);
+
+    // Reset panning state to prevent interference
+    setIsPanning(false);
+
     const type = event.dataTransfer.getData('application/reactflow') as WorkflowNodeType;
-    
+
     // Validate type
     if (!type || !['start', 'end', 'transaction', 'script', 'predicate', 'adapter', 'transform', 'logging'].includes(type as string)) return;
 
@@ -158,7 +176,7 @@ export function WorkflowCanvas({
     if (rect) {
         const x = (event.clientX - rect.left - canvas.panX) / canvas.zoom;
         const y = (event.clientY - rect.top - canvas.panY) / canvas.zoom;
-        
+
         // Center the node on cursor (approx)
         const centeredX = x - NODE_WIDTH / 2;
         const centeredY = y - NODE_HEIGHT / 2;
@@ -337,7 +355,7 @@ export function WorkflowCanvas({
   return (
     <div
       ref={canvasRef}
-      className="relative w-full h-full bg-coco-bg-primary overflow-hidden cursor-grab"
+      className={`relative w-full h-full bg-coco-bg-primary overflow-hidden cursor-grab transition-colors ${isDragOver ? 'bg-coco-accent/5 ring-2 ring-inset ring-coco-accent/30' : ''}`}
       onWheel={handleWheel}
       onClick={handleCanvasClick}
       onMouseDown={handleCanvasMouseDown}
@@ -345,6 +363,7 @@ export function WorkflowCanvas({
       onMouseUp={handleMouseUp}
       onMouseLeave={handleMouseUp}
       onDragOver={onDragOver}
+      onDragLeave={onDragLeave}
       onDrop={onDrop}
       style={{ cursor: isPanning ? 'grabbing' : drag.nodeId ? 'move' : 'grab' }}
     >
@@ -512,6 +531,13 @@ export function WorkflowCanvas({
       {contextMenu.nodeId && contextMenu.position && (() => {
         const node = definition.nodes.find(n => n.id === contextMenu.nodeId);
         if (!node) return null;
+
+        // Determine if this node can be deleted
+        // Only protect the very first start/end nodes (with specific IDs)
+        // Allow deleting extra/duplicate start/end nodes
+        const isProtectedStartEnd = (node.id === 'start' || node.id === 'end');
+        const canDelete = !isProtectedStartEnd && onNodeDelete !== undefined;
+
         return (
           <NodeContextMenu
             position={contextMenu.position}
@@ -519,9 +545,11 @@ export function WorkflowCanvas({
             nodeName={node.label || node.type}
             nodeType={node.type}
             canResume={canResume}
+            canDelete={canDelete}
             onRunSingle={onRunSingleNode || (() => {})}
             onRunUpTo={onRunUpToNode || (() => {})}
             onResumeFrom={onResumeFromNode}
+            onDelete={onNodeDelete}
             onClose={closeContextMenu}
           />
         );

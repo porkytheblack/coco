@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useRef } from 'react';
-import { Play, FastForward, RotateCcw } from 'lucide-react';
+import { Play, FastForward, RotateCcw, Trash2 } from 'lucide-react';
 
 interface NodeContextMenuProps {
   position: { x: number; y: number };
@@ -9,9 +9,11 @@ interface NodeContextMenuProps {
   nodeName: string;
   nodeType: string;
   canResume?: boolean;
+  canDelete?: boolean; // Whether this node can be deleted
   onRunSingle: (nodeId: string) => void;
   onRunUpTo: (nodeId: string) => void;
   onResumeFrom?: (nodeId: string) => void;
+  onDelete?: (nodeId: string) => void;
   onClose: () => void;
 }
 
@@ -21,9 +23,11 @@ export function NodeContextMenu({
   nodeName,
   nodeType,
   canResume = false,
+  canDelete = true,
   onRunSingle,
   onRunUpTo,
   onResumeFrom,
+  onDelete,
   onClose,
 }: NodeContextMenuProps) {
   const menuRef = useRef<HTMLDivElement>(null);
@@ -84,6 +88,7 @@ export function NodeContextMenu({
         <p className="text-sm font-medium text-coco-text-primary truncate">{nodeName}</p>
       </div>
 
+      {/* Execution options (only for non-start/end nodes) */}
       {isExecutable && (
         <div className="py-1">
           {/* Run Single Node */}
@@ -126,7 +131,27 @@ export function NodeContextMenu({
         </div>
       )}
 
-      {!isExecutable && (
+      {/* Delete option (available for all deletable nodes) */}
+      {canDelete && onDelete && (
+        <>
+          <div className="border-t border-coco-border-subtle my-1" />
+          <div className="py-1">
+            <button
+              onClick={() => {
+                onDelete(nodeId);
+                onClose();
+              }}
+              className="w-full flex items-center gap-2 px-3 py-2 text-sm text-red-400 hover:bg-red-500/10 hover:text-red-300 transition-colors"
+            >
+              <Trash2 className="w-4 h-4" />
+              Delete Node
+            </button>
+          </div>
+        </>
+      )}
+
+      {/* Info for start/end nodes without execution options */}
+      {!isExecutable && !canDelete && (
         <div className="px-3 py-2">
           <p className="text-xs text-coco-text-tertiary italic">
             {nodeType === 'start' ? 'Start node - use Run button' : 'End node - no actions'}
