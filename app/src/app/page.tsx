@@ -1070,7 +1070,7 @@ export default function AppPage() {
           {/* Scripts Tab Content */}
           {workspaceTab === 'scripts' && currentWorkspace && (
             <main className="flex-1 p-6 overflow-y-auto">
-              <ScriptList workspaceId={currentWorkspace.id} />
+              <ScriptList workspaceId={currentWorkspace.id} ecosystem={selectedChain?.ecosystem} />
             </main>
           )}
 

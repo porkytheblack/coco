@@ -8,13 +8,14 @@ import { AddScriptModal } from './add-script-modal';
 import { ScriptRunPanel } from './script-run-panel';
 import { useScripts, useDeleteScript } from '@/hooks';
 import { useToastStore } from '@/stores';
-import type { Script } from '@/types';
+import type { Script, Ecosystem } from '@/types';
 
 interface ScriptListProps {
   workspaceId: string;
+  ecosystem?: Ecosystem;
 }
 
-export function ScriptList({ workspaceId }: ScriptListProps) {
+export function ScriptList({ workspaceId, ecosystem = 'evm' }: ScriptListProps) {
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
   const [editingScript, setEditingScript] = useState<Script | null>(null);
   const [runningScript, setRunningScript] = useState<Script | null>(null);
@@ -109,6 +110,7 @@ export function ScriptList({ workspaceId }: ScriptListProps) {
         onClose={handleModalClose}
         workspaceId={workspaceId}
         editingScript={editingScript}
+        ecosystem={ecosystem}
       />
 
       {runningScript && (
