@@ -737,10 +737,17 @@ export function TransactionPanel({
                   className="bg-coco-bg-primary border border-coco-border-subtle rounded-lg overflow-hidden"
                 >
                   {/* Collapsed Header - Always visible */}
-                  <button
-                    type="button"
+                  <div
+                    role="button"
+                    tabIndex={0}
                     onClick={() => toggleRunExpanded(run.id)}
-                    className="w-full flex items-center justify-between p-3 text-left hover:bg-coco-bg-tertiary/30 transition-colors"
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter' || e.key === ' ') {
+                        e.preventDefault();
+                        toggleRunExpanded(run.id);
+                      }
+                    }}
+                    className="w-full flex items-center justify-between p-3 text-left hover:bg-coco-bg-tertiary/30 transition-colors cursor-pointer"
                   >
                     <div className="flex items-center gap-3 min-w-0 flex-1">
                       {getStatusIcon(run.status)}
@@ -788,7 +795,7 @@ export function TransactionPanel({
                         <ChevronRight className="w-4 h-4 text-coco-text-tertiary" />
                       )}
                     </div>
-                  </button>
+                  </div>
 
                   {/* Expanded Details */}
                   {isExpanded && (
