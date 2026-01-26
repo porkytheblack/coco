@@ -23,6 +23,7 @@ import {
   isTransformNode,
   isLoggingNode,
 } from '../types';
+import type { RunEmitter } from '../events';
 
 // ============================================================================
 // Error Types
@@ -68,9 +69,12 @@ export interface ExecutionContext {
   definition: WorkflowDefinition;
   variables: Record<string, unknown>;
   stepLogs: WorkflowStepLog[];
-  
+
   // External handlers (injected by the runtime)
   handlers: ExecutionHandlers;
+
+  // Optional event emitter for real-time updates
+  emitter?: RunEmitter;
 }
 
 export interface ExecutionHandlers {
@@ -512,6 +516,10 @@ function logNodeStart(ctx: ExecutionContext, node: WorkflowNode): void {
     status: 'running',
     startedAt: new Date().toISOString(),
   });
+
+  // Emit event for real-time UI updates
+  ctx.emitter?.emitStepStart(node.id, node.label || node.type, node.type);
+  ctx.emitter?.emitLogsUpdate([...ctx.stepLogs]);
 }
 
 function logNodeComplete(ctx: ExecutionContext, node: WorkflowNode, output?: unknown): void {
@@ -521,6 +529,10 @@ function logNodeComplete(ctx: ExecutionContext, node: WorkflowNode, output?: unk
     log.completedAt = new Date().toISOString();
     log.output = output;
   }
+
+  // Emit event for real-time UI updates
+  ctx.emitter?.emitStepComplete(node.id, output);
+  ctx.emitter?.emitLogsUpdate([...ctx.stepLogs]);
 }
 
 function logNodeError(ctx: ExecutionContext, node: WorkflowNode, error: string): void {
@@ -530,6 +542,10 @@ function logNodeError(ctx: ExecutionContext, node: WorkflowNode, error: string):
     log.completedAt = new Date().toISOString();
     log.error = error;
   }
+
+  // Emit event for real-time UI updates
+  ctx.emitter?.emitStepError(node.id, error);
+  ctx.emitter?.emitLogsUpdate([...ctx.stepLogs]);
 }
 
 /**
@@ -702,14 +718,15 @@ export function executeWorkflow(
   runId: string,
   definition: WorkflowDefinition,
   initialVariables: Record<string, unknown>,
-  handlers: ExecutionHandlers
+  handlers: ExecutionHandlers,
+  emitter?: RunEmitter
 ): Effect.Effect<WorkflowRun, WorkflowError> {
   const startNode = findStartNode(definition);
-  
+
   if (!startNode) {
     return Effect.fail(new WorkflowExecutionError('', 'No start node found in workflow'));
   }
-  
+
   // Initialize global variables
   const variables: Record<string, unknown> = { ...initialVariables };
   if (definition.variables) {
@@ -719,7 +736,7 @@ export function executeWorkflow(
       }
     }
   }
-  
+
   const ctx: ExecutionContext = {
     workflowId,
     runId,
@@ -727,23 +744,31 @@ export function executeWorkflow(
     variables,
     stepLogs: [],
     handlers,
+    emitter,
   };
-  
+
   const startTime = new Date().toISOString();
-  
+
+  // Emit run start event
+  emitter?.emitRunStart();
+
   return pipe(
     executeWorkflowStep([startNode.id], ctx, new Set()),
-    Effect.map(() => ({
-      id: runId,
-      workflowId,
-      status: 'completed' as const,
-      variables: ctx.variables,
-      stepLogs: ctx.stepLogs,
-      startedAt: startTime,
-      completedAt: new Date().toISOString(),
-    })),
-    Effect.catchAll((error) =>
-      Effect.succeed({
+    Effect.map(() => {
+      const result = {
+        id: runId,
+        workflowId,
+        status: 'completed' as const,
+        variables: ctx.variables,
+        stepLogs: ctx.stepLogs,
+        startedAt: startTime,
+        completedAt: new Date().toISOString(),
+      };
+      emitter?.emitRunComplete('completed');
+      return result;
+    }),
+    Effect.catchAll((error) => {
+      const result = {
         id: runId,
         workflowId,
         status: 'failed' as const,
@@ -752,8 +777,10 @@ export function executeWorkflow(
         error: error.message,
         startedAt: startTime,
         completedAt: new Date().toISOString(),
-      })
-    )
+      };
+      emitter?.emitRunError(error.message);
+      return Effect.succeed(result);
+    })
   );
 }
 
@@ -775,6 +802,7 @@ export interface ExecuteWithModeOptions {
   handlers: ExecutionHandlers;
   mode: ExecutionMode;
   existingStepLogs?: WorkflowStepLog[];
+  emitter?: RunEmitter;
 }
 
 /**
@@ -940,7 +968,7 @@ function executeFromNode(
 
 /**
  * Execute a workflow with the specified execution mode.
- * 
+ *
  * Modes:
  * - full: Execute from start to end
  * - single: Execute only the specified node
@@ -950,8 +978,8 @@ function executeFromNode(
 export function executeWorkflowWithMode(
   options: ExecuteWithModeOptions
 ): Effect.Effect<WorkflowRun, WorkflowError> {
-  const { workflowId, runId, definition, initialVariables, handlers, mode, existingStepLogs } = options;
-  
+  const { workflowId, runId, definition, initialVariables, handlers, mode, existingStepLogs, emitter } = options;
+
   // Initialize global variables
   const variables: Record<string, unknown> = { ...initialVariables };
   if (definition.variables) {
@@ -961,7 +989,7 @@ export function executeWorkflowWithMode(
       }
     }
   }
-  
+
   const ctx: ExecutionContext = {
     workflowId,
     runId,
@@ -969,21 +997,25 @@ export function executeWorkflowWithMode(
     variables,
     stepLogs: existingStepLogs || [],
     handlers,
+    emitter,
   };
-  
+
+  // Emit run start
+  emitter?.emitRunStart();
+
   switch (mode.type) {
     case 'full':
-      return executeWorkflow(workflowId, runId, definition, initialVariables, handlers);
-      
+      return executeWorkflow(workflowId, runId, definition, initialVariables, handlers, emitter);
+
     case 'single':
       return executeSingleNode(mode.nodeId, ctx);
-      
+
     case 'upto':
       return executeUptoNode(mode.nodeId, ctx);
-      
+
     case 'resume':
       return executeFromNode(mode.fromNodeId, ctx, mode.variables);
-      
+
     default:
       return Effect.fail(new WorkflowExecutionError('', `Unknown execution mode: ${(mode as ExecutionMode).type}`));
   }

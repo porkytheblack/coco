@@ -20,6 +20,14 @@ export interface ExecutionContext {
   chain: Chain;
 }
 
+// Recent workspace entry for tracking access history
+export interface RecentWorkspace {
+  workspaceId: string;
+  chainId: string;
+  name: string;
+  accessedAt: string;
+}
+
 interface WorkspaceState {
   // Data
   workspaces: Workspace[];
@@ -27,6 +35,7 @@ interface WorkspaceState {
   contracts: Contract[];
   transactions: Transaction[];
   transactionRuns: Record<string, TransactionRun[]>; // Map transactionId -> runs
+  recentWorkspaces: RecentWorkspace[]; // Recent workspaces across all chains
 
   // UI State
   isLoading: boolean;
@@ -54,6 +63,10 @@ interface WorkspaceState {
 
   selectTransaction: (transaction: Transaction | null) => void;
   clearWorkspace: () => void;
+
+  // Recent workspaces actions
+  loadRecentWorkspaces: () => Promise<void>;
+  addToRecentWorkspaces: (workspace: Workspace) => Promise<void>;
 }
 
 // Mock data
@@ -130,12 +143,16 @@ function parseContractFunctions(contract: Contract, ecosystem: 'evm' | 'solana' 
   return adapter.parseInterface(contract);
 }
 
+const MAX_RECENT_WORKSPACES = 6;
+const RECENT_WORKSPACES_KEY = 'recent_workspaces';
+
 export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
   workspaces: [],
   currentWorkspace: null,
   contracts: [],
   transactions: [],
   transactionRuns: {},
+  recentWorkspaces: [],
   isLoading: false,
   error: null,
   selectedTransaction: null,
@@ -178,6 +195,9 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
       }
 
       set({ currentWorkspace: workspace, isLoading: false });
+
+      // Track this workspace access
+      get().addToRecentWorkspaces(workspace);
 
       // Get the chain to determine ecosystem for contract parsing
       let ecosystem: 'evm' | 'solana' | 'aptos' = 'evm';
@@ -348,8 +368,22 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
 
     try {
       // Determine ecosystem from the current workspace's chain
-      // For now, default to 'evm' - in real implementation, get from chain store
-      const ecosystem = 'evm' as const;
+      let ecosystem: 'evm' | 'solana' | 'aptos' = 'evm';
+      if (tauri.checkIsTauri()) {
+        try {
+          const chain = await tauri.getChain(currentWorkspace.chainId);
+          ecosystem = chain.ecosystem || 'evm';
+        } catch (err) {
+          console.warn('Failed to get chain for ecosystem detection:', err);
+          // Fallback: infer from interfaceType
+          if (request.interfaceType === 'move') ecosystem = 'aptos';
+          else if (request.interfaceType === 'idl') ecosystem = 'solana';
+        }
+      } else {
+        // Fallback: infer from interfaceType for non-Tauri dev
+        if (request.interfaceType === 'move') ecosystem = 'aptos';
+        else if (request.interfaceType === 'idl') ecosystem = 'solana';
+      }
 
       let contract: Contract;
 
@@ -882,5 +916,45 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
       transactionRuns: {},
       selectedTransaction: null,
     });
+  },
+
+  loadRecentWorkspaces: async () => {
+    try {
+      if (tauri.checkIsTauri()) {
+        const stored = await tauri.getPreference(RECENT_WORKSPACES_KEY);
+        if (stored && Array.isArray(stored)) {
+          set({ recentWorkspaces: stored as RecentWorkspace[] });
+        }
+      }
+    } catch (error) {
+      console.error('Failed to load recent workspaces:', error);
+    }
+  },
+
+  addToRecentWorkspaces: async (workspace: Workspace) => {
+    try {
+      const { recentWorkspaces } = get();
+
+      // Create new entry
+      const entry: RecentWorkspace = {
+        workspaceId: workspace.id,
+        chainId: workspace.chainId,
+        name: workspace.name,
+        accessedAt: new Date().toISOString(),
+      };
+
+      // Remove existing entry for this workspace (if any) and add new one at front
+      const filtered = recentWorkspaces.filter(w => w.workspaceId !== workspace.id);
+      const updated = [entry, ...filtered].slice(0, MAX_RECENT_WORKSPACES);
+
+      set({ recentWorkspaces: updated });
+
+      // Persist to preferences
+      if (tauri.checkIsTauri()) {
+        await tauri.setPreference(RECENT_WORKSPACES_KEY, updated);
+      }
+    } catch (error) {
+      console.error('Failed to add to recent workspaces:', error);
+    }
   },
 }));

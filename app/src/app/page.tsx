@@ -35,6 +35,7 @@ export default function AppPage() {
 
   // Chain selection page state
   const { chains, selectedChain, selectChain, addChain, updateChain, deleteChain, loadChains } = useChainStore();
+  const { recentWorkspaces, loadRecentWorkspaces } = useWorkspaceStore();
   const { addToast } = useToastStore();
   const [showChainSettings, setShowChainSettings] = useState(false);
 
@@ -91,10 +92,11 @@ export default function AppPage() {
   const [showCocoChat, setShowCocoChat] = useState(false);
   const [chainSearch, setChainSearch] = useState('');
 
-  // Load chains on mount
+  // Load chains and recent workspaces on mount
   useEffect(() => {
     loadChains();
-  }, [loadChains]);
+    loadRecentWorkspaces();
+  }, [loadChains, loadRecentWorkspaces]);
 
   // Load data based on view
   useEffect(() => {
@@ -122,6 +124,12 @@ export default function AppPage() {
       return () => clearWorkspace();
     }
   }, [route.view, route.workspaceId, route.chainId, chains, loadWorkspace, clearWorkspace, selectChain, loadWallets]);
+
+  // Reset selected workflow when workspace changes
+  useEffect(() => {
+    setSelectedWorkflowId(null);
+    setWorkspaceTab('contracts');
+  }, [route.workspaceId]);
 
   // Load wallet transactions when viewing wallet detail
   useEffect(() => {
@@ -218,6 +226,40 @@ export default function AppPage() {
               </button>
             </div>
           </div>
+
+          {/* Recent Workspaces */}
+          {recentWorkspaces.length > 0 && !chainSearch && (
+            <div className="w-full max-w-4xl mb-8 no-drag">
+              <h2 className="text-sm font-semibold text-coco-text-secondary uppercase tracking-wider mb-3">
+                Recent Workspaces
+              </h2>
+              <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+                {recentWorkspaces.slice(0, 6).map((recent) => {
+                  const chain = chains.find(c => c.id === recent.chainId);
+                  const timeSince = getTimeSince(recent.accessedAt);
+                  return (
+                    <button
+                      key={recent.workspaceId}
+                      onClick={() => navigate({ view: 'workspace', chainId: recent.chainId, workspaceId: recent.workspaceId })}
+                      className="flex items-center gap-3 p-3 bg-coco-bg-secondary border border-coco-border-subtle rounded-lg hover:border-coco-accent/50 hover:bg-coco-bg-tertiary transition-all text-left group"
+                    >
+                      <div className="w-8 h-8 rounded-lg bg-coco-accent/10 flex items-center justify-center flex-shrink-0">
+                        <Rocket className="w-4 h-4 text-coco-accent" />
+                      </div>
+                      <div className="min-w-0 flex-1">
+                        <p className="font-medium text-coco-text-primary truncate text-sm">
+                          {recent.name}
+                        </p>
+                        <p className="text-xs text-coco-text-tertiary truncate">
+                          {chain?.name || 'Unknown chain'} · {timeSince}
+                        </p>
+                      </div>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          )}
 
           {/* Blockchain Grid */}
           <BlockchainGrid
@@ -1032,4 +1074,20 @@ function getNetworkName(rpcUrl: string): string | null {
   if (url.includes('devnet')) return 'Devnet';
   if (url.includes('testnet')) return 'Testnet';
   return null;
+}
+
+function getTimeSince(dateStr: string): string {
+  const date = new Date(dateStr);
+  const now = new Date();
+  const diffMs = now.getTime() - date.getTime();
+  const diffMins = Math.floor(diffMs / (1000 * 60));
+  const diffHours = Math.floor(diffMs / (1000 * 60 * 60));
+  const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
+
+  if (diffMins < 1) return 'Just now';
+  if (diffMins < 60) return `${diffMins}m ago`;
+  if (diffHours < 24) return `${diffHours}h ago`;
+  if (diffDays === 1) return 'Yesterday';
+  if (diffDays < 7) return `${diffDays}d ago`;
+  return date.toLocaleDateString();
 }

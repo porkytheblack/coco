@@ -1,22 +1,24 @@
 'use client';
 
-import { useState, useMemo } from 'react';
-import { 
-  Play, 
-  CheckCircle, 
-  XCircle, 
-  Clock, 
-  ChevronRight, 
+import { useState, useMemo, useEffect, useCallback } from 'react';
+import {
+  Play,
+  CheckCircle,
+  XCircle,
+  Clock,
+  ChevronRight,
   ChevronDown,
   Activity,
   RefreshCw,
   Bug,
-  FileJson
+  FileJson,
+  Loader2
 } from 'lucide-react';
 import { useQueryClient } from '@tanstack/react-query';
 import { useWorkflowRuns, useWorkflow } from '@/hooks/use-workflows';
 import { queryKeys } from '@/lib/react-query';
 import type { WorkflowStepLog, WorkflowRunStatus } from '@/lib/workflow/types';
+import { workflowEvents } from '@/lib/workflow/events';
 import { clsx } from 'clsx';
 
 interface WorkflowRunsPanelProps {
@@ -40,14 +42,51 @@ export function WorkflowRunsPanel({ workflowId, onRunSelect }: WorkflowRunsPanel
   const queryClient = useQueryClient();
   const [selectedRunId, setSelectedRunId] = useState<string | null>(null);
   const [showDebug, setShowDebug] = useState(false);
+  const [liveStepLogs, setLiveStepLogs] = useState<WorkflowStepLog[]>([]);
+  const [isLiveExecution, setIsLiveExecution] = useState(false);
   const { data: runsData = [], isLoading, refetch } = useWorkflowRuns(workflowId, true); // Polling enabled
   const { data: workflow } = useWorkflow(showDebug ? workflowId : undefined); // Fetch workflow only in debug
 
-  const handleRefresh = () => {
+  // Subscribe to live execution events
+  useEffect(() => {
+    const handleRunStart = () => {
+      setIsLiveExecution(true);
+      setLiveStepLogs([]);
+    };
+
+    const handleLogsUpdate = (logs: WorkflowStepLog[]) => {
+      setLiveStepLogs(logs);
+    };
+
+    const handleRunComplete = () => {
+      setIsLiveExecution(false);
+      // Refetch to get the final data from backend
+      setTimeout(() => refetch(), 500);
+    };
+
+    const handleRunError = () => {
+      setIsLiveExecution(false);
+      setTimeout(() => refetch(), 500);
+    };
+
+    workflowEvents.on('run:start', handleRunStart);
+    workflowEvents.on('logs:update', handleLogsUpdate);
+    workflowEvents.on('run:complete', handleRunComplete);
+    workflowEvents.on('run:error', handleRunError);
+
+    return () => {
+      workflowEvents.off('run:start', handleRunStart);
+      workflowEvents.off('logs:update', handleLogsUpdate);
+      workflowEvents.off('run:complete', handleRunComplete);
+      workflowEvents.off('run:error', handleRunError);
+    };
+  }, [refetch]);
+
+  const handleRefresh = useCallback(() => {
     refetch();
     // Also invalidate to be sure
     queryClient.invalidateQueries({ queryKey: queryKeys.workflowRuns(workflowId) });
-  };
+  }, [refetch, queryClient, workflowId]);
 
   // Parse runs data
   const runs = useMemo(() => {
@@ -75,7 +114,14 @@ export function WorkflowRunsPanel({ workflowId, onRunSelect }: WorkflowRunsPanel
     }).sort((a, b) => new Date(b.startedAt).getTime() - new Date(a.startedAt).getTime());
   }, [runsData]);
 
-  const selectedRun = selectedRunId ? runs.find(r => r.id === selectedRunId) : runs[0];
+  // For selected run, use live logs if execution is in progress
+  const selectedRun = useMemo(() => {
+    const run = selectedRunId ? runs.find(r => r.id === selectedRunId) : runs[0];
+    if (isLiveExecution && run && run.status === 'running' && liveStepLogs.length > 0) {
+      return { ...run, stepLogs: liveStepLogs };
+    }
+    return run;
+  }, [runs, selectedRunId, isLiveExecution, liveStepLogs]);
 
   // Helper for date formatting
   const formatTime = (dateStr: string) => {
@@ -123,21 +169,33 @@ export function WorkflowRunsPanel({ workflowId, onRunSelect }: WorkflowRunsPanel
       {/* Runs List */}
       <div className="w-64 border-r border-coco-border-subtle overflow-y-auto">
         <div className="p-2 sticky top-0 bg-coco-bg-elevated border-b border-coco-border-subtle flex items-center justify-between">
-          <h3 className="text-xs font-semibold text-coco-text-secondary uppercase tracking-wider">
-            Execution History
-          </h3>
+          <div className="flex items-center gap-2">
+            <h3 className="text-xs font-semibold text-coco-text-secondary uppercase tracking-wider">
+              Execution History
+            </h3>
+            {isLiveExecution && (
+              <span className="flex items-center gap-1 px-1.5 py-0.5 bg-emerald-500/20 text-emerald-400 text-[10px] font-semibold rounded animate-pulse">
+                <span className="w-1.5 h-1.5 bg-emerald-400 rounded-full" />
+                LIVE
+              </span>
+            )}
+          </div>
           <div className="flex items-center gap-1">
-            <button 
+            <button
                 onClick={() => setShowDebug(!showDebug)}
                 className={`p-1 rounded transition-colors ${showDebug ? 'text-coco-accent bg-coco-bg-tertiary' : 'text-coco-text-tertiary hover:text-coco-text-primary'}`}
                 title="Toggle Debug View"
             >
                 <Bug className="w-3 h-3" />
             </button>
-            <button 
+            <button
                 onClick={handleRefresh}
-                className="p-1 hover:bg-coco-bg-tertiary rounded text-coco-text-tertiary hover:text-coco-text-primary transition-colors"
+                className={clsx(
+                  "p-1 hover:bg-coco-bg-tertiary rounded text-coco-text-tertiary hover:text-coco-text-primary transition-colors",
+                  isLiveExecution && "animate-spin"
+                )}
                 title="Refresh runs"
+                disabled={isLiveExecution}
             >
                 <RefreshCw className="w-3 h-3" />
             </button>

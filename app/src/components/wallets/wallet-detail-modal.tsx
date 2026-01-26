@@ -1,10 +1,11 @@
 'use client';
 
 import { useState } from 'react';
-import { Copy, CheckCircle, Trash2, RefreshCw, ExternalLink, Droplets } from 'lucide-react';
+import { Copy, CheckCircle, Trash2, RefreshCw, ExternalLink, Droplets, Key, Eye, EyeOff, AlertTriangle } from 'lucide-react';
 import { Modal, Button } from '@/components/ui';
 import type { WalletWithBalance } from '@/types';
 import { formatBalance } from '@/lib/utils/format';
+import { useGetWalletPrivateKey } from '@/hooks/use-wallets';
 
 interface WalletDetailModalProps {
   wallet: WalletWithBalance | null;
@@ -30,6 +31,10 @@ export function WalletDetailModal({
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [isFunding, setIsFunding] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [showExportKey, setShowExportKey] = useState(false);
+  const [privateKey, setPrivateKey] = useState<string | null>(null);
+  const [showPrivateKey, setShowPrivateKey] = useState(false);
+  const getPrivateKeyMutation = useGetWalletPrivateKey();
 
   if (!wallet) return null;
 
@@ -68,6 +73,23 @@ export function WalletDetailModal({
     } finally {
       setIsFunding(false);
     }
+  };
+
+  const handleExportKey = async () => {
+    try {
+      const key = await getPrivateKeyMutation.mutateAsync(wallet.id);
+      setPrivateKey(key);
+      setShowExportKey(true);
+    } catch (error) {
+      console.error('Failed to export private key:', error);
+    }
+  };
+
+  const handleCloseExportKey = () => {
+    setShowExportKey(false);
+    setPrivateKey(null);
+    setShowPrivateKey(false);
+    setCopied(null);
   };
 
   const openInExplorer = () => {
@@ -172,6 +194,61 @@ export function WalletDetailModal({
             </p>
           </div>
         </div>
+
+        {/* Export Private Key */}
+        {showExportKey && privateKey ? (
+          <div className="bg-amber-500/10 border border-amber-500/30 rounded-lg p-4 space-y-3">
+            <div className="flex items-start gap-2">
+              <AlertTriangle className="w-5 h-5 text-amber-500 flex-shrink-0 mt-0.5" />
+              <div>
+                <h4 className="font-medium text-amber-500 text-sm">Warning: Private Key</h4>
+                <p className="text-xs text-coco-text-secondary mt-1">
+                  Never share your private key. Anyone with this key can access your funds.
+                </p>
+              </div>
+            </div>
+            <div className="flex items-center gap-2 bg-coco-bg-primary rounded-lg p-3">
+              <code className="flex-1 text-sm font-mono text-coco-text-primary break-all">
+                {showPrivateKey ? privateKey : '•'.repeat(Math.min(privateKey.length, 32)) + '...'}
+              </code>
+              <button
+                onClick={() => setShowPrivateKey(!showPrivateKey)}
+                className="p-1.5 hover:bg-coco-bg-tertiary rounded transition-colors"
+                title={showPrivateKey ? 'Hide' : 'Show'}
+              >
+                {showPrivateKey ? (
+                  <EyeOff className="w-4 h-4 text-coco-text-tertiary" />
+                ) : (
+                  <Eye className="w-4 h-4 text-coco-text-tertiary" />
+                )}
+              </button>
+              <button
+                onClick={() => handleCopy(privateKey, 'privateKey')}
+                className="p-1.5 hover:bg-coco-bg-tertiary rounded transition-colors"
+                title="Copy"
+              >
+                {copied === 'privateKey' ? (
+                  <CheckCircle className="w-4 h-4 text-coco-success" />
+                ) : (
+                  <Copy className="w-4 h-4 text-coco-text-tertiary" />
+                )}
+              </button>
+            </div>
+            <Button variant="secondary" size="sm" onClick={handleCloseExportKey} className="w-full">
+              Hide Private Key
+            </Button>
+          </div>
+        ) : (
+          <Button
+            variant="ghost"
+            onClick={handleExportKey}
+            isLoading={getPrivateKeyMutation.isPending}
+            className="w-full"
+          >
+            <Key className="w-4 h-4 mr-2" />
+            Export Private Key
+          </Button>
+        )}
 
         {/* Actions */}
         <div className="flex gap-3">
