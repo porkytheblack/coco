@@ -427,13 +427,13 @@ export function CocoChatDrawer({ isOpen, onClose, context }: CocoChatDrawerProps
         onClick={onClose}
       />
 
-      {/* Drawer - Left side */}
+      {/* Drawer - Right side */}
       <div
         className={clsx(
-          'fixed left-0 top-0 bottom-0 w-[400px]',
-          'bg-coco-bg-elevated border-r border-coco-border-subtle',
+          'fixed right-0 top-0 bottom-0 w-[400px]',
+          'bg-coco-bg-elevated border-l border-coco-border-subtle',
           'shadow-drawer z-50 flex flex-col',
-          'animate-slide-in-left'
+          'animate-slide-in'
         )}
       >
         {/* Header */}
