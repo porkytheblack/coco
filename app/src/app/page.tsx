@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { Settings, Plus, Play, Rocket, Copy, ExternalLink, Trash2, RefreshCw, ArrowUpRight, ArrowDownLeft, Sun, Moon, Search, Send, Droplet, FileCode, Key, Files, GripVertical } from 'lucide-react';
+import { Settings, Plus, Play, Rocket, Copy, ExternalLink, Trash2, RefreshCw, ArrowUpRight, ArrowDownLeft, Sun, Moon, Search, Send, Droplet, FileCode, Key, Files, GripVertical, Eye, EyeOff, AlertTriangle, CheckCircle } from 'lucide-react';
 import Image from 'next/image';
 import { TopBar } from '@/components/layout';
 import { IconButton, Button, StatusIndicator, CocoLogo } from '@/components/ui';
@@ -15,7 +15,7 @@ import { ScriptList } from '@/components/scripts';
 import { EnvVarList } from '@/components/env';
 import { WorkflowList, CreateWorkflowModal, WorkflowBuilder } from '@/components/workflows';
 import { useWorkflows, useWorkflow, useCreateWorkflow, useUpdateWorkflow, useRunWorkflow } from '@/hooks/use-workflows';
-import { useScripts } from '@/hooks';
+import { useScripts, useGetWalletPrivateKey } from '@/hooks';
 import { useChainStore, useWalletStore, useWorkspaceStore, useToastStore, useThemeStore, useAIStore } from '@/stores';
 import { useRouter } from '@/contexts';
 import { openExternal } from '@/lib/tauri/commands';
@@ -46,6 +46,11 @@ export default function AppPage() {
   const [showCreateWorkspace, setShowCreateWorkspace] = useState(false);
   const [copiedAddress, setCopiedAddress] = useState(false);
   const [showSendModal, setShowSendModal] = useState(false);
+  const [showExportKey, setShowExportKey] = useState(false);
+  const [exportedPrivateKey, setExportedPrivateKey] = useState<string | null>(null);
+  const [showPrivateKey, setShowPrivateKey] = useState(false);
+  const [copiedPrivateKey, setCopiedPrivateKey] = useState(false);
+  const getPrivateKeyMutation = useGetWalletPrivateKey();
 
   // Workspace state
   const {
@@ -677,7 +682,83 @@ export default function AppPage() {
                   <ExternalLink className="w-3 h-3 ml-1.5 opacity-60" />
                 </Button>
               )}
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={async () => {
+                  try {
+                    const key = await getPrivateKeyMutation.mutateAsync(wallet.id);
+                    setExportedPrivateKey(key);
+                    setShowExportKey(true);
+                  } catch (error) {
+                    addToast({ type: 'error', title: 'Failed to export key', message: String(error) });
+                  }
+                }}
+                isLoading={getPrivateKeyMutation.isPending}
+              >
+                <Key className="w-4 h-4 mr-2" />
+                Export Key
+              </Button>
             </div>
+
+            {/* Export Private Key Section */}
+            {showExportKey && exportedPrivateKey && (
+              <div className="mt-4 p-4 bg-amber-500/10 border border-amber-500/30 rounded-lg space-y-3">
+                <div className="flex items-start gap-2">
+                  <AlertTriangle className="w-5 h-5 text-amber-500 flex-shrink-0 mt-0.5" />
+                  <div>
+                    <h4 className="font-medium text-amber-500 text-sm">Private Key</h4>
+                    <p className="text-xs text-coco-text-secondary mt-1">
+                      Never share your private key. Anyone with this key can access your funds.
+                    </p>
+                  </div>
+                </div>
+                <div className="flex items-center gap-2 bg-coco-bg-primary rounded-lg p-3">
+                  <code className="flex-1 text-sm font-mono text-coco-text-primary break-all">
+                    {showPrivateKey ? exportedPrivateKey : '•'.repeat(Math.min(exportedPrivateKey.length, 32)) + '...'}
+                  </code>
+                  <button
+                    onClick={() => setShowPrivateKey(!showPrivateKey)}
+                    className="p-1.5 hover:bg-coco-bg-tertiary rounded transition-colors"
+                    title={showPrivateKey ? 'Hide' : 'Show'}
+                  >
+                    {showPrivateKey ? (
+                      <EyeOff className="w-4 h-4 text-coco-text-tertiary" />
+                    ) : (
+                      <Eye className="w-4 h-4 text-coco-text-tertiary" />
+                    )}
+                  </button>
+                  <button
+                    onClick={async () => {
+                      await navigator.clipboard.writeText(exportedPrivateKey);
+                      setCopiedPrivateKey(true);
+                      setTimeout(() => setCopiedPrivateKey(false), 2000);
+                    }}
+                    className="p-1.5 hover:bg-coco-bg-tertiary rounded transition-colors"
+                    title="Copy"
+                  >
+                    {copiedPrivateKey ? (
+                      <CheckCircle className="w-4 h-4 text-coco-success" />
+                    ) : (
+                      <Copy className="w-4 h-4 text-coco-text-tertiary" />
+                    )}
+                  </button>
+                </div>
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  onClick={() => {
+                    setShowExportKey(false);
+                    setExportedPrivateKey(null);
+                    setShowPrivateKey(false);
+                    setCopiedPrivateKey(false);
+                  }}
+                  className="w-full"
+                >
+                  Hide Private Key
+                </Button>
+              </div>
+            )}
           </div>
 
           {/* Transaction History */}
