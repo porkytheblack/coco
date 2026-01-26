@@ -97,6 +97,22 @@ export function WorkflowToolbar({ onAddNode, isCollapsed = false, onToggle }: Wo
     event.dataTransfer.setData('text/plain', nodeType); // Fallback
     event.dataTransfer.effectAllowed = 'move';
 
+    // Create a custom drag image for better visual feedback
+    const dragEl = event.currentTarget as HTMLElement;
+    if (dragEl) {
+      // Clone the element for drag image
+      const clone = dragEl.cloneNode(true) as HTMLElement;
+      clone.style.position = 'absolute';
+      clone.style.top = '-1000px';
+      clone.style.left = '-1000px';
+      clone.style.width = `${dragEl.offsetWidth}px`;
+      clone.style.opacity = '0.8';
+      document.body.appendChild(clone);
+      event.dataTransfer.setDragImage(clone, dragEl.offsetWidth / 2, 20);
+      // Clean up the clone after a short delay
+      setTimeout(() => clone.remove(), 0);
+    }
+
     console.log('[Toolbar] Data set, effectAllowed:', event.dataTransfer.effectAllowed);
   };
 

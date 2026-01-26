@@ -144,16 +144,20 @@ export function WorkflowCanvas({
     }
   }, []);
 
-  // Handle drop
+  // Handle drag enter
+  const onDragEnter = useCallback((event: React.DragEvent) => {
+    event.preventDefault();
+    event.stopPropagation();
+    console.log('[Canvas] Drag enter event');
+    setIsDragOver(true);
+  }, []);
+
+  // Handle drag over
   const onDragOver = useCallback((event: React.DragEvent) => {
     event.preventDefault();
     event.stopPropagation();
     event.dataTransfer.dropEffect = 'move';
-    if (!isDragOver) {
-      console.log('[Canvas] Drag entered canvas');
-      setIsDragOver(true);
-    }
-  }, [isDragOver]);
+  }, []);
 
   const onDragLeave = useCallback((event: React.DragEvent) => {
     // Only set false if we're leaving the canvas (not entering a child)
@@ -390,6 +394,7 @@ export function WorkflowCanvas({
       onMouseMove={handleMouseMove}
       onMouseUp={handleMouseUp}
       onMouseLeave={handleMouseUp}
+      onDragEnter={onDragEnter}
       onDragOver={onDragOver}
       onDragLeave={onDragLeave}
       onDrop={onDrop}
@@ -430,13 +435,13 @@ export function WorkflowCanvas({
               className="text-coco-text-tertiary"
               markerEnd="url(#arrowhead)"
             />
-            {/* Clickable area for edge deletion */}
+            {/* Clickable area for edge deletion - disable during drag to allow drops */}
             <path
               d={getEdgePath(edge)}
               fill="none"
               stroke="transparent"
               strokeWidth="20"
-              className="pointer-events-auto cursor-pointer"
+              className={`${isDragOver ? 'pointer-events-none' : 'pointer-events-auto cursor-pointer'}`}
               onClick={() => onEdgeDelete(edge.id)}
             />
           </g>
@@ -492,6 +497,17 @@ export function WorkflowCanvas({
               }}
               onMouseDown={(e) => handleNodeDragStart(node.id, e)}
               onContextMenu={(e) => handleNodeContextMenu(node.id, e)}
+              onDragOver={(e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                e.dataTransfer.dropEffect = 'move';
+              }}
+              onDrop={(e) => {
+                // Forward drop to canvas handler
+                e.preventDefault();
+                e.stopPropagation();
+                onDrop(e);
+              }}
             >
               {/* Node content */}
               <div className="flex items-center justify-center h-full px-3">
