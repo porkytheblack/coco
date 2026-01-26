@@ -10,7 +10,7 @@ import { WorkspaceGrid, CreateWorkspaceModal, WorkspaceSettingsModal } from '@/c
 import { AddChainModal, ChainSettingsModal, BlockchainGrid, NetworkSelectionModal } from '@/components/chains';
 import { ContractList, AddContractModal, EditContractModal, ContractPanel } from '@/components/contracts';
 import { TransactionPanel, CreateTransactionModal } from '@/components/transactions';
-import { AISettingsModal, CocoChatModal } from '@/components/ai';
+import { AISettingsModal, CocoChatDrawer } from '@/components/ai';
 import { ScriptList } from '@/components/scripts';
 import { EnvVarList } from '@/components/env';
 import { WorkflowList, CreateWorkflowModal, WorkflowBuilder } from '@/components/workflows';
@@ -399,7 +399,7 @@ export default function AppPage() {
           onClose={() => setShowAISettings(false)}
         />
 
-        <CocoChatModal
+        <CocoChatDrawer
           isOpen={showCocoChat}
           onClose={() => setShowCocoChat(false)}
         />
@@ -518,7 +518,7 @@ export default function AppPage() {
           </>
         )}
 
-        <CocoChatModal
+        <CocoChatDrawer
           isOpen={showCocoChat}
           onClose={() => setShowCocoChat(false)}
           context={{ ecosystem: selectedChain?.ecosystem, chainId: selectedChain?.id }}
@@ -769,7 +769,7 @@ export default function AppPage() {
           </div>
         </main>
 
-        <CocoChatModal
+        <CocoChatDrawer
           isOpen={showCocoChat}
           onClose={() => setShowCocoChat(false)}
           context={{ ecosystem: selectedChain?.ecosystem, chainId: selectedChain?.id }}
@@ -1090,7 +1090,7 @@ export default function AppPage() {
           }}
         />
 
-        <CocoChatModal
+        <CocoChatDrawer
           isOpen={showCocoChat}
           onClose={() => setShowCocoChat(false)}
           context={{ ecosystem: selectedChain?.ecosystem, chainId: selectedChain?.id }}
