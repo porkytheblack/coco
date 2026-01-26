@@ -65,6 +65,8 @@ export function WorkflowBuilder({
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
   const [historyHeight, setHistoryHeight] = useState(300);
   const [isResizing, setIsResizing] = useState(false);
+  const [panelWidth, setPanelWidth] = useState(320); // Default width for config panel
+  const [isResizingPanel, setIsResizingPanel] = useState(false);
   const [isExecuting, setIsExecuting] = useState(false);
   const { currentWorkspace } = useWorkspaceStore();
 
@@ -247,6 +249,38 @@ export function WorkflowBuilder({
       window.removeEventListener('mouseup', stopResizing);
     };
   }, [isResizing, onResize, stopResizing]);
+
+  // Panel resize handlers (horizontal)
+  const startResizingPanel = useCallback(() => {
+    setIsResizingPanel(true);
+  }, []);
+
+  const stopResizingPanel = useCallback(() => {
+    setIsResizingPanel(false);
+  }, []);
+
+  const onResizePanel = useCallback((e: MouseEvent) => {
+    if (isResizingPanel) {
+      const newWidth = window.innerWidth - e.clientX;
+      if (newWidth >= 280 && newWidth <= 600) {
+        setPanelWidth(newWidth);
+      }
+    }
+  }, [isResizingPanel]);
+
+  useEffect(() => {
+    if (isResizingPanel) {
+      window.addEventListener('mousemove', onResizePanel);
+      window.addEventListener('mouseup', stopResizingPanel);
+    } else {
+      window.removeEventListener('mousemove', onResizePanel);
+      window.removeEventListener('mouseup', stopResizingPanel);
+    }
+    return () => {
+      window.removeEventListener('mousemove', onResizePanel);
+      window.removeEventListener('mouseup', stopResizingPanel);
+    };
+  }, [isResizingPanel, onResizePanel, stopResizingPanel]);
 
   // Save handler
   const handleSave = useCallback(() => {
@@ -713,10 +747,13 @@ export function WorkflowBuilder({
       </div>
 
       {/* Main content wrapper */}
-      <div className={`flex-1 flex flex-col overflow-hidden min-h-0 relative ${isResizing ? 'select-none' : ''}`}>
+      <div className={`flex-1 flex flex-col overflow-hidden min-h-0 relative ${isResizing || isResizingPanel ? 'select-none' : ''}`}>
         {/* Resize Overlay */}
         {isResizing && (
           <div className="fixed inset-0 z-[100] cursor-ns-resize" />
+        )}
+        {isResizingPanel && (
+          <div className="fixed inset-0 z-[100] cursor-ew-resize" />
         )}
 
         {/* Builder Area */}
@@ -747,24 +784,38 @@ export function WorkflowBuilder({
             />
           </div>
 
-          {/* Panel */}
-          <WorkflowPanel
-            node={selectedNode}
-            transactions={transactions}
-            contracts={contracts}
-            scripts={scripts}
-            wallets={wallets}
-            onClose={() => setSelectedNodeId(null)}
-            onUpdate={handleNodeUpdate}
-            onDelete={handleNodeDelete}
-            workspaceId={currentWorkspace?.id}
-            definition={definition}
-            onSave={handleSave}
-            isSaving={isSaving}
-            onRunSingleNode={handleRunSingleNode}
-            onRunUpToNode={handleRunUpToNode}
-            isExecuting={isExecuting}
-          />
+          {/* Panel with resize handle */}
+          {selectedNode && (
+            <div
+              style={{ width: panelWidth }}
+              className="relative flex-shrink-0"
+            >
+              {/* Resize Handle */}
+              <div
+                onMouseDown={startResizingPanel}
+                className="absolute -left-1.5 top-0 w-3 h-full cursor-ew-resize hover:bg-coco-accent/20 z-[60] group transition-colors flex items-center justify-center"
+              >
+                <div className="w-1 h-16 rounded-full bg-coco-border-subtle group-hover:bg-coco-accent transition-colors opacity-30 group-hover:opacity-100" />
+              </div>
+              <WorkflowPanel
+                node={selectedNode}
+                transactions={transactions}
+                contracts={contracts}
+                scripts={scripts}
+                wallets={wallets}
+                onClose={() => setSelectedNodeId(null)}
+                onUpdate={handleNodeUpdate}
+                onDelete={handleNodeDelete}
+                workspaceId={currentWorkspace?.id}
+                definition={definition}
+                onSave={handleSave}
+                isSaving={isSaving}
+                onRunSingleNode={handleRunSingleNode}
+                onRunUpToNode={handleRunUpToNode}
+                isExecuting={isExecuting}
+              />
+            </div>
+          )}
         </div>
 
         {/* Runs Panel */}

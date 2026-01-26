@@ -82,7 +82,7 @@ export function WorkflowPanel({
   if (!node) return null;
 
   return (
-    <div className="w-80 bg-coco-bg-elevated border-l border-coco-border-subtle flex flex-col">
+    <div className="w-full h-full bg-coco-bg-elevated border-l border-coco-border-subtle flex flex-col">
       {/* Header */}
       <div className="flex items-center justify-between p-4 border-b border-coco-border-subtle">
         <div className="flex items-center gap-2">
