@@ -90,8 +90,18 @@ const NODE_TEMPLATES: NodeTemplate[] = [
 
 export function WorkflowToolbar({ onAddNode, isCollapsed = false, onToggle }: WorkflowToolbarProps) {
   const onDragStart = (event: React.DragEvent, nodeType: WorkflowNodeType) => {
+    // Set the drag data
     event.dataTransfer.setData('application/reactflow', nodeType);
+    event.dataTransfer.setData('text/plain', nodeType); // Fallback
     event.dataTransfer.effectAllowed = 'move';
+
+    // Create a drag image
+    const dragImage = event.currentTarget.cloneNode(true) as HTMLElement;
+    dragImage.style.position = 'absolute';
+    dragImage.style.top = '-1000px';
+    document.body.appendChild(dragImage);
+    event.dataTransfer.setDragImage(dragImage, 20, 20);
+    setTimeout(() => document.body.removeChild(dragImage), 0);
   };
 
   const categories = [

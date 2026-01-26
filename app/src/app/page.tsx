@@ -885,10 +885,15 @@ export default function AppPage() {
                     {transactions.map((tx, index) => (
                       <div
                         key={tx.id}
-                        draggable
-                        onDragStart={() => setDraggedTxIndex(index)}
+                        draggable={true}
+                        onDragStart={(e) => {
+                          setDraggedTxIndex(index);
+                          e.dataTransfer.effectAllowed = 'move';
+                          e.dataTransfer.setData('text/plain', String(index));
+                        }}
                         onDragOver={(e) => {
                           e.preventDefault();
+                          e.dataTransfer.dropEffect = 'move';
                           e.currentTarget.classList.add('bg-coco-accent/10');
                         }}
                         onDragLeave={(e) => {

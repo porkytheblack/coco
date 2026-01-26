@@ -167,10 +167,18 @@ export function WorkflowCanvas({
     // Reset panning state to prevent interference
     setIsPanning(false);
 
-    const type = event.dataTransfer.getData('application/reactflow') as WorkflowNodeType;
+    // Try to get the type from multiple data formats
+    let type = event.dataTransfer.getData('application/reactflow') as WorkflowNodeType;
+    if (!type) {
+      type = event.dataTransfer.getData('text/plain') as WorkflowNodeType;
+    }
 
     // Validate type
-    if (!type || !['start', 'end', 'transaction', 'script', 'predicate', 'adapter', 'transform', 'logging'].includes(type as string)) return;
+    const validTypes = ['start', 'end', 'transaction', 'script', 'predicate', 'adapter', 'transform', 'logging'];
+    if (!type || !validTypes.includes(type)) {
+      console.log('Invalid or missing node type:', type);
+      return;
+    }
 
     const rect = canvasRef.current?.getBoundingClientRect();
     if (rect) {

@@ -149,12 +149,15 @@ function ActionParamEditor({ params, onChange, actionDef }: ActionParamEditorPro
     onChange({ ...params, [key]: value });
   };
 
-  const paramList = actionDef?.parameters || Object.keys(params).map(key => ({
-    name: key,
-    type: typeof params[key],
-    required: false,
-    description: undefined,
-  }));
+  // Use action definition parameters if available and not empty, otherwise derive from params object
+  const paramList = (actionDef?.parameters && actionDef.parameters.length > 0)
+    ? actionDef.parameters
+    : Object.keys(params).map(key => ({
+        name: key,
+        type: typeof params[key] === 'string' ? 'string' : 'unknown',
+        required: false,
+        description: undefined as string | undefined,
+      }));
 
   return (
     <div className="mt-3 border border-coco-border-subtle rounded-lg overflow-hidden">
@@ -164,32 +167,33 @@ function ActionParamEditor({ params, onChange, actionDef }: ActionParamEditorPro
       >
         <span className="text-xs font-medium text-coco-text-secondary flex items-center gap-2">
           <Edit2 className="w-3 h-3" />
-          Parameters ({Object.keys(params).length})
+          Parameters ({paramList.length})
         </span>
         {expanded ? <ChevronDown className="w-4 h-4 text-coco-text-tertiary" /> : <ChevronRight className="w-4 h-4 text-coco-text-tertiary" />}
       </button>
 
       {expanded && (
         <div className="p-3 space-y-3 bg-coco-bg-primary">
-          {paramList.map((param) => (
-            <div key={param.name}>
-              <label className="block text-xs font-medium text-coco-text-secondary mb-1">
-                {param.name}
-                {param.required && <span className="text-coco-error ml-1">*</span>}
-              </label>
-              <input
-                type="text"
-                value={String(params[param.name] ?? '')}
-                onChange={(e) => handleParamChange(param.name, e.target.value)}
-                placeholder={param.description || `Enter ${param.name}`}
-                className="w-full px-3 py-2 text-sm bg-coco-bg-secondary border border-coco-border-default rounded-lg focus:outline-none focus:ring-2 focus:ring-coco-accent placeholder:text-coco-text-tertiary"
-              />
-              {param.description && (
-                <p className="text-[10px] text-coco-text-tertiary mt-1">{param.description}</p>
-              )}
-            </div>
-          ))}
-          {Object.keys(params).length === 0 && (
+          {paramList.length > 0 ? (
+            paramList.map((param) => (
+              <div key={param.name}>
+                <label className="block text-xs font-medium text-coco-text-secondary mb-1">
+                  {param.name}
+                  {param.required && <span className="text-coco-error ml-1">*</span>}
+                </label>
+                <input
+                  type="text"
+                  value={String(params[param.name] ?? '')}
+                  onChange={(e) => handleParamChange(param.name, e.target.value)}
+                  placeholder={param.description || `Enter ${param.name}`}
+                  className="w-full px-3 py-2 text-sm bg-coco-bg-secondary border border-coco-border-default rounded-lg focus:outline-none focus:ring-2 focus:ring-coco-accent placeholder:text-coco-text-tertiary"
+                />
+                {param.description && (
+                  <p className="text-[10px] text-coco-text-tertiary mt-1">{param.description}</p>
+                )}
+              </div>
+            ))
+          ) : (
             <p className="text-xs text-coco-text-tertiary text-center py-2">No parameters required</p>
           )}
         </div>
@@ -220,6 +224,8 @@ export function CocoChatDrawer({ isOpen, onClose, context }: CocoChatDrawerProps
   const [editableParams, setEditableParams] = useState<Record<string, unknown>>({});
   const [actionResult, setActionResult] = useState<ActionResult | null>(null);
   const [isExecutingAction, setIsExecutingAction] = useState(false);
+  const [drawerWidth, setDrawerWidth] = useState(400);
+  const [isResizing, setIsResizing] = useState(false);
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
@@ -411,6 +417,38 @@ export function CocoChatDrawer({ isOpen, onClose, context }: CocoChatDrawerProps
     };
   }, [isOpen, handleKeyDown]);
 
+  // Drawer resize handlers
+  const startResizing = useCallback(() => {
+    setIsResizing(true);
+  }, []);
+
+  const stopResizing = useCallback(() => {
+    setIsResizing(false);
+  }, []);
+
+  const onResize = useCallback((e: MouseEvent) => {
+    if (isResizing) {
+      const newWidth = window.innerWidth - e.clientX;
+      if (newWidth >= 320 && newWidth <= 700) {
+        setDrawerWidth(newWidth);
+      }
+    }
+  }, [isResizing]);
+
+  useEffect(() => {
+    if (isResizing) {
+      window.addEventListener('mousemove', onResize);
+      window.addEventListener('mouseup', stopResizing);
+    } else {
+      window.removeEventListener('mousemove', onResize);
+      window.removeEventListener('mouseup', stopResizing);
+    }
+    return () => {
+      window.removeEventListener('mousemove', onResize);
+      window.removeEventListener('mouseup', stopResizing);
+    };
+  }, [isResizing, onResize, stopResizing]);
+
   // Get action definition for display
   const getActionInfo = (actionId: string) => {
     const action = actionRegistry.get(actionId);
@@ -427,15 +465,29 @@ export function CocoChatDrawer({ isOpen, onClose, context }: CocoChatDrawerProps
         onClick={onClose}
       />
 
+      {/* Resize overlay */}
+      {isResizing && (
+        <div className="fixed inset-0 z-[100] cursor-ew-resize" />
+      )}
+
       {/* Drawer - Right side */}
       <div
+        style={{ width: drawerWidth }}
         className={clsx(
-          'fixed right-0 top-0 bottom-0 w-[400px]',
+          'fixed right-0 top-0 bottom-0',
           'bg-coco-bg-elevated border-l border-coco-border-subtle',
           'shadow-drawer z-50 flex flex-col',
-          'animate-slide-in'
+          'animate-slide-in',
+          isResizing && 'select-none'
         )}
       >
+        {/* Resize Handle */}
+        <div
+          onMouseDown={startResizing}
+          className="absolute -left-1.5 top-0 w-3 h-full cursor-ew-resize hover:bg-coco-accent/20 z-[60] group transition-colors flex items-center justify-center"
+        >
+          <div className="w-1 h-16 rounded-full bg-coco-border-subtle group-hover:bg-coco-accent transition-colors opacity-30 group-hover:opacity-100" />
+        </div>
         {/* Header */}
         <div className="flex items-center justify-between px-4 py-3 border-b border-coco-border-subtle bg-coco-bg-elevated">
           <div className="flex items-center gap-3">
