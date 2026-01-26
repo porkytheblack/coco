@@ -90,18 +90,18 @@ const NODE_TEMPLATES: NodeTemplate[] = [
 
 export function WorkflowToolbar({ onAddNode, isCollapsed = false, onToggle }: WorkflowToolbarProps) {
   const onDragStart = (event: React.DragEvent, nodeType: WorkflowNodeType) => {
+    console.log('[Toolbar] Drag started for:', nodeType);
+
     // Set the drag data
     event.dataTransfer.setData('application/reactflow', nodeType);
     event.dataTransfer.setData('text/plain', nodeType); // Fallback
     event.dataTransfer.effectAllowed = 'move';
 
-    // Create a drag image
-    const dragImage = event.currentTarget.cloneNode(true) as HTMLElement;
-    dragImage.style.position = 'absolute';
-    dragImage.style.top = '-1000px';
-    document.body.appendChild(dragImage);
-    event.dataTransfer.setDragImage(dragImage, 20, 20);
-    setTimeout(() => document.body.removeChild(dragImage), 0);
+    console.log('[Toolbar] Data set, effectAllowed:', event.dataTransfer.effectAllowed);
+  };
+
+  const onDragEnd = (event: React.DragEvent, nodeType: WorkflowNodeType) => {
+    console.log('[Toolbar] Drag ended for:', nodeType, 'dropEffect:', event.dataTransfer.dropEffect);
   };
 
   const categories = [
@@ -148,10 +148,11 @@ export function WorkflowToolbar({ onAddNode, isCollapsed = false, onToggle }: Wo
                 {nodes.map(template => (
                   <div
                     key={template.type}
-                    draggable="true"
+                    draggable={true}
                     onDragStart={(event) => onDragStart(event, template.type)}
+                    onDragEnd={(event) => onDragEnd(event, template.type)}
                     onClick={() => onAddNode(template.type)}
-                    className={`w-full flex items-center gap-3 px-3 py-2 rounded-lg text-left hover:bg-coco-bg-tertiary transition-colors group cursor-grab active:cursor-grabbing select-none ${isCollapsed ? 'justify-center px-2' : ''}`}
+                    className={`w-full flex items-center gap-3 px-3 py-2 rounded-lg text-left hover:bg-coco-bg-tertiary transition-colors group cursor-grab active:cursor-grabbing ${isCollapsed ? 'justify-center px-2' : ''}`}
                     title={template.description}
                     role="button"
                     tabIndex={0}

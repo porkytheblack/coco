@@ -324,7 +324,25 @@ export function CocoChatDrawer({ isOpen, onClose, context }: CocoChatDrawerProps
     try {
       const currentConfig = settings.providers[settings.provider];
       aiService.setAdapter(settings.provider, currentConfig);
-      const response = await aiService.chat(userMessage, enrichedContext);
+
+      // Build message history for the AI (include all previous messages + new one)
+      const messageHistory = [
+        ...chatHistory.map(msg => ({
+          role: msg.role as 'user' | 'assistant',
+          content: msg.content,
+        })),
+        { role: 'user' as const, content: userMessage },
+      ];
+
+      // Determine if this is the first message in the conversation
+      const isFirstMessage = chatHistory.length === 0;
+
+      // Use chatWithHistory to send full conversation context
+      const response = await aiService.chatWithHistory(
+        messageHistory,
+        enrichedContext,
+        isFirstMessage
+      );
 
       // Check if response contains an action
       const parsedAction = parseActionFromResponse(response);

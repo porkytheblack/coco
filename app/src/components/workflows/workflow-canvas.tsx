@@ -149,13 +149,26 @@ export function WorkflowCanvas({
     event.preventDefault();
     event.stopPropagation();
     event.dataTransfer.dropEffect = 'move';
-    setIsDragOver(true);
-  }, []);
+    if (!isDragOver) {
+      console.log('[Canvas] Drag entered canvas');
+      setIsDragOver(true);
+    }
+  }, [isDragOver]);
 
   const onDragLeave = useCallback((event: React.DragEvent) => {
     // Only set false if we're leaving the canvas (not entering a child)
-    if (event.currentTarget === event.target) {
-      setIsDragOver(false);
+    const rect = canvasRef.current?.getBoundingClientRect();
+    if (rect) {
+      const { clientX, clientY } = event;
+      if (
+        clientX <= rect.left ||
+        clientX >= rect.right ||
+        clientY <= rect.top ||
+        clientY >= rect.bottom
+      ) {
+        console.log('[Canvas] Drag left canvas');
+        setIsDragOver(false);
+      }
     }
   }, []);
 
@@ -167,16 +180,22 @@ export function WorkflowCanvas({
     // Reset panning state to prevent interference
     setIsPanning(false);
 
+    console.log('[Canvas] Drop event received');
+    console.log('[Canvas] Available types:', event.dataTransfer.types);
+
     // Try to get the type from multiple data formats
     let type = event.dataTransfer.getData('application/reactflow') as WorkflowNodeType;
+    console.log('[Canvas] application/reactflow data:', type);
+
     if (!type) {
       type = event.dataTransfer.getData('text/plain') as WorkflowNodeType;
+      console.log('[Canvas] text/plain data:', type);
     }
 
     // Validate type
     const validTypes = ['start', 'end', 'transaction', 'script', 'predicate', 'adapter', 'transform', 'logging'];
     if (!type || !validTypes.includes(type)) {
-      console.log('Invalid or missing node type:', type);
+      console.log('[Canvas] Invalid or missing node type:', type);
       return;
     }
 
@@ -189,6 +208,7 @@ export function WorkflowCanvas({
         const centeredX = x - NODE_WIDTH / 2;
         const centeredY = y - NODE_HEIGHT / 2;
 
+        console.log('[Canvas] Creating node at:', { x: centeredX, y: centeredY });
         const newNode = createNode(type, { x: centeredX, y: centeredY });
         onNodeAdd(newNode);
     }
