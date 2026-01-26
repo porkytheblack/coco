@@ -431,7 +431,7 @@ export function WorkflowCanvas({
 
       {/* Nodes */}
       <div
-        className="absolute"
+        className="absolute pointer-events-none"
         style={{
           transform: `translate(${canvas.panX}px, ${canvas.panY}px) scale(${canvas.zoom})`,
           transformOrigin: '0 0',
@@ -445,7 +445,7 @@ export function WorkflowCanvas({
             <div
               key={node.id}
               className={`
-                absolute rounded-lg border-2 transition-shadow
+                absolute rounded-lg border-2 transition-shadow pointer-events-auto
                 ${colors.bg} ${colors.border}
                 ${isSelected ? 'ring-2 ring-coco-accent ring-offset-2 ring-offset-coco-bg-primary' : ''}
                 ${nodeStatus[node.id] === 'running' ? 'animate-pulse ring-2 ring-blue-400 ring-offset-2' : ''}

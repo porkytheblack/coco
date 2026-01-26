@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect, useRef, useCallback } from 'react';
-import { Play, Loader2, CheckCircle, XCircle, Copy, ExternalLink, Clock, ChevronDown, ChevronRight, Trash2, Pencil, Check, X } from 'lucide-react';
+import { Play, Loader2, CheckCircle, XCircle, Copy, ExternalLink, Clock, ChevronDown, ChevronRight, Trash2, Pencil, Check, X, RotateCcw } from 'lucide-react';
 import { clsx } from 'clsx';
 import { Button } from '@/components/ui';
 import { ErrorExplanation } from '@/components/ai';
@@ -263,6 +263,61 @@ export function TransactionPanel({
       }
       return next;
     });
+  };
+
+  // Rerun a previous execution with the same payload
+  const handleRerun = async (run: TransactionRun) => {
+    if (!run.payload || isExecuting) return;
+
+    // Use the currently selected wallet for rerun
+    if (!selectedWalletId) {
+      setError('Please select a wallet');
+      addToast({
+        type: 'error',
+        title: 'Wallet required',
+        message: 'Please select a wallet to rerun the transaction',
+      });
+      return;
+    }
+
+    setIsExecuting(true);
+    setError(null);
+
+    try {
+      // Convert payload to Record<string, string> (stringify non-string values)
+      const stringPayload: Record<string, string> = {};
+      for (const [key, value] of Object.entries(run.payload)) {
+        stringPayload[key] = typeof value === 'string' ? value : JSON.stringify(value);
+      }
+
+      const result = await onExecute(stringPayload, selectedWalletId);
+
+      if (result.status === 'success') {
+        addToast({
+          type: 'success',
+          title: 'Transaction rerun successful',
+          message: result.txHash ? `TX: ${truncateHash(result.txHash)}` : 'Transaction completed successfully',
+        });
+        setExpandedRuns((prev) => new Set([...prev, result.id]));
+      } else if (result.status === 'failed') {
+        addToast({
+          type: 'error',
+          title: 'Transaction rerun failed',
+          message: result.errorMessage || 'Transaction execution failed',
+        });
+        setExpandedRuns((prev) => new Set([...prev, result.id]));
+      }
+    } catch (err) {
+      const errorMessage = (err as Error).message;
+      setError(errorMessage);
+      addToast({
+        type: 'error',
+        title: 'Rerun error',
+        message: errorMessage,
+      });
+    } finally {
+      setIsExecuting(false);
+    }
   };
 
   const getStatusIcon = (status: TxStatus) => {
@@ -714,6 +769,19 @@ export function TransactionPanel({
                       <span className="text-xs text-coco-text-tertiary">
                         {formatShortDate(run.startedAt)}
                       </span>
+                      {run.payload && Object.keys(run.payload).length > 0 && (
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleRerun(run);
+                          }}
+                          disabled={isExecuting}
+                          className="p-1.5 text-coco-text-tertiary hover:text-coco-accent hover:bg-coco-accent/10 rounded transition-colors disabled:opacity-50"
+                          title="Rerun with same arguments"
+                        >
+                          <RotateCcw className="w-3.5 h-3.5" />
+                        </button>
+                      )}
                       {isExpanded ? (
                         <ChevronDown className="w-4 h-4 text-coco-text-tertiary" />
                       ) : (

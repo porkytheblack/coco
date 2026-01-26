@@ -59,6 +59,7 @@ interface WorkspaceState {
   updateTransactionArgs: (transactionId: string, args: Record<string, string>) => Promise<void>;
   executeTransaction: (transactionId: string, payload: Record<string, string>, walletId: string, context?: ExecutionContext) => Promise<TransactionRun>;
   deleteTransaction: (transactionId: string) => Promise<void>;
+  reorderTransactions: (fromIndex: number, toIndex: number) => void;
   getTransactionRuns: (transactionId: string) => TransactionRun[];
   loadTransactionRuns: (transactionId: string) => Promise<void>;
 
@@ -944,6 +945,15 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
       console.error('Failed to delete transaction:', error);
       throw error;
     }
+  },
+
+  reorderTransactions: (fromIndex: number, toIndex: number) => {
+    set((state) => {
+      const newTransactions = [...state.transactions];
+      const [removed] = newTransactions.splice(fromIndex, 1);
+      newTransactions.splice(toIndex, 0, removed);
+      return { transactions: newTransactions };
+    });
   },
 
   selectTransaction: (transaction: Transaction | null) => {

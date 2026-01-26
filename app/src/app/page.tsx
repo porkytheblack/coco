@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { Settings, Plus, Play, Rocket, Copy, ExternalLink, Trash2, RefreshCw, ArrowUpRight, ArrowDownLeft, Sun, Moon, Search, Send, Droplet, FileCode, Key, Files } from 'lucide-react';
+import { Settings, Plus, Play, Rocket, Copy, ExternalLink, Trash2, RefreshCw, ArrowUpRight, ArrowDownLeft, Sun, Moon, Search, Send, Droplet, FileCode, Key, Files, GripVertical } from 'lucide-react';
 import Image from 'next/image';
 import { TopBar } from '@/components/layout';
 import { IconButton, Button, StatusIndicator, CocoLogo } from '@/components/ui';
@@ -62,9 +62,13 @@ export default function AppPage() {
     createTransaction,
     executeTransaction,
     deleteTransaction,
+    reorderTransactions,
     deleteWorkspace,
     getTransactionRuns,
   } = useWorkspaceStore();
+
+  // Transaction reordering state
+  const [draggedTxIndex, setDraggedTxIndex] = useState<number | null>(null);
 
   // Workspace modals state
   const [showAddContract, setShowAddContract] = useState(false);
@@ -878,28 +882,50 @@ export default function AppPage() {
                     <h2 className="text-sm font-semibold text-coco-text-primary">Transactions</h2>
                   </div>
                   <div className="flex-1 overflow-y-auto">
-                    {transactions.map((tx) => (
-                      <button
+                    {transactions.map((tx, index) => (
+                      <div
                         key={tx.id}
+                        draggable
+                        onDragStart={() => setDraggedTxIndex(index)}
+                        onDragOver={(e) => {
+                          e.preventDefault();
+                          e.currentTarget.classList.add('bg-coco-accent/10');
+                        }}
+                        onDragLeave={(e) => {
+                          e.currentTarget.classList.remove('bg-coco-accent/10');
+                        }}
+                        onDrop={(e) => {
+                          e.preventDefault();
+                          e.currentTarget.classList.remove('bg-coco-accent/10');
+                          if (draggedTxIndex !== null && draggedTxIndex !== index) {
+                            reorderTransactions(draggedTxIndex, index);
+                          }
+                          setDraggedTxIndex(null);
+                        }}
+                        onDragEnd={() => setDraggedTxIndex(null)}
                         onClick={() => {
                           selectTransaction(tx);
                           setSelectedContract(null);
                         }}
                         className={clsx(
-                          'w-full px-4 py-2 text-left border-b border-coco-border-subtle',
-                          'transition-all duration-base',
+                          'w-full px-2 py-2 text-left border-b border-coco-border-subtle cursor-pointer',
+                          'transition-all duration-base flex items-center gap-1',
                           selectedTransaction?.id === tx.id
                             ? 'bg-coco-bg-tertiary border-l-2 border-l-coco-accent'
-                            : 'hover:bg-coco-bg-secondary'
+                            : 'hover:bg-coco-bg-secondary',
+                          draggedTxIndex === index && 'opacity-50'
                         )}
                       >
-                        <div className="flex items-center gap-2">
+                        <div className="cursor-grab active:cursor-grabbing p-1 text-coco-text-tertiary hover:text-coco-text-secondary">
+                          <GripVertical className="w-4 h-4" />
+                        </div>
+                        <div className="flex items-center gap-2 flex-1 min-w-0">
                           <span className="w-2 h-2 rounded-full bg-coco-success flex-shrink-0" />
                           <span className="text-sm font-medium text-coco-text-primary truncate">
                             {tx.name || tx.id.slice(0, 10)}
                           </span>
                         </div>
-                      </button>
+                      </div>
                     ))}
                   </div>
                   <button
