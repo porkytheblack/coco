@@ -14,7 +14,7 @@ on:
 
 jobs:
   release:
-    uses: porkytheblack/oasis/.github/workflows/tauri-release.yml@v1
+    uses: porkytheblack/oasis/.github/workflows/tauri-release.yml@main
     with:
       app_slug: coco
       app_name: Coco
