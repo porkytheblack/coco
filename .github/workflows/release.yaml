@@ -22,7 +22,7 @@ jobs:
       app_dir: app
       distribute_to: r2,oasis,github
       dry_run: ${{ inputs.dry_run || false }}
-      r2_public_url: ${{ secrets.R2_PUBLIC_URL }}
+      r2_public_url: ${{ vars.R2_PUBLIC_URL }}
     secrets:
       APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
       APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
