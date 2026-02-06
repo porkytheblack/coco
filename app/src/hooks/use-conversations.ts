@@ -27,9 +27,10 @@ export function useCreateConversation() {
   return useMutation({
     mutationFn: (params: { workspaceId?: string; title?: string }) =>
       tauri.createConversation(params.workspaceId, params.title),
-    onSuccess: (_, variables) => {
+    onSuccess: () => {
+      // Invalidate all conversation list queries (both workspace-scoped and "all")
       queryClient.invalidateQueries({
-        queryKey: queryKeys.conversations(variables.workspaceId),
+        queryKey: ['conversations'],
       });
     },
   });
@@ -43,8 +44,9 @@ export function useUpdateConversation() {
       tauri.updateConversation(params.conversationId, params.title),
     onSuccess: (data, variables) => {
       queryClient.setQueryData(queryKeys.conversation(variables.conversationId), data);
+      // Invalidate all conversation list queries
       queryClient.invalidateQueries({
-        queryKey: queryKeys.conversations(variables.workspaceId),
+        queryKey: ['conversations'],
       });
     },
   });
@@ -58,8 +60,9 @@ export function useDeleteConversation() {
       tauri.deleteConversation(params.conversationId),
     onSuccess: (_, variables) => {
       queryClient.removeQueries({ queryKey: queryKeys.conversation(variables.conversationId) });
+      // Invalidate all conversation list queries
       queryClient.invalidateQueries({
-        queryKey: queryKeys.conversations(variables.workspaceId),
+        queryKey: ['conversations'],
       });
     },
   });

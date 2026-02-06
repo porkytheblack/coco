@@ -9,3 +9,6 @@ export { Terminal } from './terminal';
 export { StatusIndicator } from './status-indicator';
 export { ToastContainer } from './toast';
 export { CocoLogo } from './coco-logo';
+export { CommandPalette } from './command-palette';
+export { ThemePicker } from './theme-picker';
+export { UpdateNotification } from './update-notification';

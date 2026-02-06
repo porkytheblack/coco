@@ -2,6 +2,19 @@ import { ethers } from 'ethers';
 import type { ChainAdapter, CallResult, WalletBalance } from './types';
 import type { Contract, ContractFunction, WalletTransaction } from '@/types';
 
+/**
+ * Safely normalize an Ethereum address to its EIP-55 checksummed form.
+ * Handles addresses with incorrect mixed-case checksums by lowercasing first.
+ */
+function safeGetAddress(address: string): string {
+  try {
+    return ethers.getAddress(address);
+  } catch {
+    // If the checksum is invalid, lowercase it first then compute correct checksum
+    return ethers.getAddress(address.toLowerCase());
+  }
+}
+
 interface ABIItem {
   type: string;
   name?: string;
@@ -44,7 +57,7 @@ export const evmAdapter: ChainAdapter = {
       if (!contractAddress || !ethers.isAddress(contractAddress)) {
         return { success: false, error: `Invalid contract address: ${contractAddress}` };
       }
-      const normalizedAddress = ethers.getAddress(contractAddress);
+      const normalizedAddress = safeGetAddress(contractAddress);
 
       // Validate and normalize any address arguments to prevent ENS resolution
       const normalizedArgs = normalizeAddressArgs(args, contractInterface as ethers.InterfaceAbi, functionName);
@@ -79,7 +92,7 @@ export const evmAdapter: ChainAdapter = {
       if (!contractAddress || !ethers.isAddress(contractAddress)) {
         return { success: false, error: `Invalid contract address: ${contractAddress}` };
       }
-      const normalizedAddress = ethers.getAddress(contractAddress);
+      const normalizedAddress = safeGetAddress(contractAddress);
 
       // Create provider and wait for network to be detected (ensures chain ID is set)
       const provider = new ethers.JsonRpcProvider(rpcUrl);
@@ -189,7 +202,7 @@ export const evmAdapter: ChainAdapter = {
       const provider = new ethers.JsonRpcProvider(rpcUrl);
       // Use getAddress to normalize the address and prevent ENS resolution attempts
       // This ensures we always pass a valid checksummed address
-      const checksummedAddress = ethers.getAddress(address);
+      const checksummedAddress = safeGetAddress(address);
       const balance = await provider.getBalance(checksummedAddress);
 
       return {
@@ -216,7 +229,7 @@ export const evmAdapter: ChainAdapter = {
     blockExplorerApiKey?: string
   ): Promise<WalletTransaction[]> {
     // Normalize address to checksummed format for consistent comparison
-    const checksummedAddress = ethers.getAddress(address);
+    const checksummedAddress = safeGetAddress(address);
 
     // Use block explorer API (Etherscan-compatible)
     if (!blockExplorerApiUrl) {
@@ -431,7 +444,7 @@ function normalizeAddressArgs(args: unknown[], contractInterface: ethers.Interfa
         if (!ethers.isAddress(arg)) {
           throw new Error(`Invalid address for parameter '${input.name || index}': ${arg}`);
         }
-        return ethers.getAddress(arg);
+        return safeGetAddress(arg);
       }
 
       // Handle address arrays
@@ -441,7 +454,7 @@ function normalizeAddressArgs(args: unknown[], contractInterface: ethers.Interfa
             if (!ethers.isAddress(addr)) {
               throw new Error(`Invalid address at index ${i} for parameter '${input.name || index}': ${addr}`);
             }
-            return ethers.getAddress(addr);
+            return safeGetAddress(addr);
           }
           return addr;
         });

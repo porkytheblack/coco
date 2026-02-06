@@ -7,31 +7,269 @@ use crate::types::{
 use chrono::{DateTime, Utc};
 use std::collections::HashMap;
 use std::process::Stdio;
-use std::sync::Arc;
+use std::sync::{Arc, OnceLock};
 use tokio::io::AsyncReadExt;
 use tokio::process::Command;
 use tokio::sync::RwLock;
 use uuid::Uuid;
 
+/// Cached user shell environment variables.
+/// This is populated once on first access by running the user's login shell.
+static USER_SHELL_ENV: OnceLock<HashMap<String, String>> = OnceLock::new();
+
+/// Fetch the user's shell environment by running their login shell.
+/// This captures PATH and other environment variables that GUI apps don't inherit.
+/// The result is cached in USER_SHELL_ENV for the lifetime of the application.
+fn fetch_user_shell_env() -> HashMap<String, String> {
+    #[cfg(any(target_os = "macos", target_os = "linux"))]
+    {
+        // Try zsh first (default on macOS), then bash as fallback
+        let shells_to_try = ["/bin/zsh", "/bin/bash"];
+
+        for shell in shells_to_try {
+            if !std::path::Path::new(shell).exists() {
+                continue;
+            }
+
+            // Run the shell as an interactive login shell to source all profile files
+            // -i: interactive, -l: login, -c: execute command
+            let result = std::process::Command::new(shell)
+                .args(["-ilc", "env"])
+                .stdin(std::process::Stdio::null())
+                .stdout(std::process::Stdio::piped())
+                .stderr(std::process::Stdio::null())
+                .output();
+
+            if let Ok(output) = result {
+                if output.status.success() {
+                    let env_output = String::from_utf8_lossy(&output.stdout);
+                    let mut env_map = HashMap::new();
+
+                    for line in env_output.lines() {
+                        // Environment variables are in KEY=VALUE format
+                        // Some values may contain '=' so we only split on the first one
+                        if let Some(pos) = line.find('=') {
+                            let key = &line[..pos];
+                            let value = &line[pos + 1..];
+                            // Skip shell-specific variables that could cause issues
+                            if !key.starts_with('_')
+                                && key != "SHLVL"
+                                && key != "PWD"
+                                && key != "OLDPWD"
+                                && !key.is_empty()
+                            {
+                                env_map.insert(key.to_string(), value.to_string());
+                            }
+                        }
+                    }
+
+                    if !env_map.is_empty() {
+                        return env_map;
+                    }
+                }
+            }
+        }
+
+        // Fallback: return empty map, will use get_enhanced_path() instead
+        HashMap::new()
+    }
+
+    #[cfg(target_os = "windows")]
+    {
+        // Windows GUI apps generally inherit environment properly,
+        // but we can still try to get additional paths from cmd
+        let result = std::process::Command::new("cmd.exe")
+            .args(["/C", "set"])
+            .stdin(std::process::Stdio::null())
+            .stdout(std::process::Stdio::piped())
+            .stderr(std::process::Stdio::null())
+            .output();
+
+        if let Ok(output) = result {
+            if output.status.success() {
+                let env_output = String::from_utf8_lossy(&output.stdout);
+                let mut env_map = HashMap::new();
+
+                for line in env_output.lines() {
+                    if let Some(pos) = line.find('=') {
+                        let key = &line[..pos];
+                        let value = &line[pos + 1..];
+                        if !key.is_empty() {
+                            env_map.insert(key.to_string(), value.to_string());
+                        }
+                    }
+                }
+
+                if !env_map.is_empty() {
+                    return env_map;
+                }
+            }
+        }
+
+        HashMap::new()
+    }
+
+    #[cfg(not(any(target_os = "macos", target_os = "linux", target_os = "windows")))]
+    {
+        HashMap::new()
+    }
+}
+
+/// Get the cached user shell environment.
+/// On first call, this runs the user's login shell to capture their full environment.
+fn get_user_shell_env() -> &'static HashMap<String, String> {
+    USER_SHELL_ENV.get_or_init(fetch_user_shell_env)
+}
+
+/// Find the latest nvm-managed node binary directory.
+/// Returns the path to the bin directory of the most recently modified node version.
+fn find_nvm_node_bin(home: &str) -> Option<String> {
+    let nvm_versions_dir = format!("{}/.nvm/versions/node", home);
+    let versions_path = std::path::Path::new(&nvm_versions_dir);
+
+    if !versions_path.exists() || !versions_path.is_dir() {
+        return None;
+    }
+
+    // Find all node version directories and get the one with the latest modification time
+    let mut latest_version: Option<(std::time::SystemTime, std::path::PathBuf)> = None;
+
+    if let Ok(entries) = std::fs::read_dir(versions_path) {
+        for entry in entries.flatten() {
+            let path = entry.path();
+            if path.is_dir() {
+                let bin_path = path.join("bin");
+                if bin_path.exists() {
+                    // Check modification time of the version directory
+                    if let Ok(metadata) = path.metadata() {
+                        if let Ok(modified) = metadata.modified() {
+                            match &latest_version {
+                                None => {
+                                    latest_version = Some((modified, bin_path));
+                                }
+                                Some((latest_time, _)) if modified > *latest_time => {
+                                    latest_version = Some((modified, bin_path));
+                                }
+                                _ => {}
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    latest_version.map(|(_, path)| path.to_string_lossy().to_string())
+}
+
 /// Get an enhanced PATH that includes common tool installation directories.
 /// This is necessary because GUI apps on macOS/Windows don't inherit the user's shell PATH.
+///
+/// This function first tries to use the cached user shell environment's PATH.
+/// If that's not available, it falls back to adding known tool directories.
 fn get_enhanced_path() -> String {
+    // First, try to get PATH from the user's shell environment
+    let shell_env = get_user_shell_env();
+    if let Some(shell_path) = shell_env.get("PATH") {
+        if !shell_path.is_empty() {
+            // Merge shell PATH with any additional paths we know about
+            // This ensures we have the user's full PATH plus any extras
+            return merge_paths_with_extras(shell_path);
+        }
+    }
+
+    // Fallback: build PATH from known tool locations
+    build_fallback_path()
+}
+
+/// Merge the user's shell PATH with additional known tool directories.
+fn merge_paths_with_extras(shell_path: &str) -> String {
+    let home = std::env::var("HOME").unwrap_or_default();
+
+    #[cfg(any(target_os = "macos", target_os = "linux"))]
+    {
+        let mut extra_paths = vec![
+            format!("{}/.foundry/bin", home),  // Foundry's default install location
+        ];
+
+        // Add nvm-managed node if available
+        if let Some(nvm_bin) = find_nvm_node_bin(&home) {
+            extra_paths.push(nvm_bin);
+        }
+
+        // Add Volta bin directory
+        let volta_bin = format!("{}/.volta/bin", home);
+        if std::path::Path::new(&volta_bin).exists() {
+            extra_paths.push(volta_bin);
+        }
+
+        // Filter out paths that are already in the shell PATH
+        let shell_path_lower = shell_path.to_lowercase();
+        let extra_paths: Vec<String> = extra_paths
+            .into_iter()
+            .filter(|p| !shell_path_lower.contains(&p.to_lowercase()))
+            .collect();
+
+        if extra_paths.is_empty() {
+            shell_path.to_string()
+        } else {
+            format!("{}:{}", extra_paths.join(":"), shell_path)
+        }
+    }
+
+    #[cfg(target_os = "windows")]
+    {
+        let userprofile = std::env::var("USERPROFILE").unwrap_or_default();
+        let extra_paths = vec![
+            format!(r"{}\.foundry\bin", userprofile),  // Foundry on Windows
+        ];
+
+        let shell_path_lower = shell_path.to_lowercase();
+        let extra_paths: Vec<String> = extra_paths
+            .into_iter()
+            .filter(|p| !shell_path_lower.contains(&p.to_lowercase()))
+            .collect();
+
+        if extra_paths.is_empty() {
+            shell_path.to_string()
+        } else {
+            format!("{};{}", extra_paths.join(";"), shell_path)
+        }
+    }
+
+    #[cfg(not(any(target_os = "macos", target_os = "linux", target_os = "windows")))]
+    {
+        shell_path.to_string()
+    }
+}
+
+/// Build a fallback PATH from known tool installation directories.
+/// Used when we can't fetch the user's shell environment.
+fn build_fallback_path() -> String {
     let current_path = std::env::var("PATH").unwrap_or_default();
 
     #[cfg(target_os = "macos")]
     {
         let home = std::env::var("HOME").unwrap_or_default();
-        let additional_paths = [
+        let mut additional_paths = vec![
             "/opt/homebrew/bin".to_string(),           // Homebrew on Apple Silicon
             "/opt/homebrew/sbin".to_string(),
             "/usr/local/bin".to_string(),              // Homebrew on Intel Macs
             "/usr/local/sbin".to_string(),
-            format!("{}/.cargo/bin", home),            // Rust/Cargo (forge, etc.)
+            format!("{}/.cargo/bin", home),            // Rust/Cargo
+            format!("{}/.foundry/bin", home),          // Foundry (forge, cast, anvil)
             format!("{}/.local/bin", home),            // pipx, local installs
             "/usr/local/share/npm/bin".to_string(),    // Global npm packages
             format!("{}/Library/pnpm", home),          // pnpm global bin
             format!("{}/.bun/bin", home),              // Bun
+            format!("{}/.volta/bin", home),            // Volta-managed Node.js
         ];
+
+        // Add nvm-managed node if available
+        if let Some(nvm_bin) = find_nvm_node_bin(&home) {
+            additional_paths.push(nvm_bin);
+        }
+
         let mut paths: Vec<&str> = additional_paths.iter().map(|s| s.as_str()).collect();
         if !current_path.is_empty() {
             paths.push(&current_path);
@@ -46,9 +284,11 @@ fn get_enhanced_path() -> String {
         let localappdata = std::env::var("LOCALAPPDATA").unwrap_or_default();
         let additional_paths = [
             format!(r"{}\.cargo\bin", userprofile),     // Rust/Cargo
+            format!(r"{}\.foundry\bin", userprofile),   // Foundry (forge, cast, anvil)
             format!(r"{}\npm", appdata),                // Global npm packages
             format!(r"{}\pnpm", localappdata),          // pnpm
             format!(r"{}\.bun\bin", userprofile),       // Bun
+            format!(r"{}\.volta\bin", userprofile),     // Volta-managed Node.js
             r"C:\Program Files\nodejs".to_string(),    // Node.js default install
         ];
         let mut paths: Vec<&str> = additional_paths.iter().map(|s| s.as_str()).collect();
@@ -61,17 +301,44 @@ fn get_enhanced_path() -> String {
     #[cfg(not(any(target_os = "macos", target_os = "windows")))]
     {
         let home = std::env::var("HOME").unwrap_or_default();
-        let additional_paths = [
+        let mut additional_paths = vec![
             format!("{}/.cargo/bin", home),            // Rust/Cargo
+            format!("{}/.foundry/bin", home),          // Foundry (forge, cast, anvil)
             format!("{}/.local/bin", home),            // Local installs
+            format!("{}/.volta/bin", home),            // Volta-managed Node.js
             "/usr/local/bin".to_string(),
         ];
+
+        // Add nvm-managed node if available
+        if let Some(nvm_bin) = find_nvm_node_bin(&home) {
+            additional_paths.push(nvm_bin);
+        }
+
         let mut paths: Vec<&str> = additional_paths.iter().map(|s| s.as_str()).collect();
         if !current_path.is_empty() {
             paths.push(&current_path);
         }
         paths.join(":")
     }
+}
+
+/// Apply the user's shell environment to a Command.
+/// This sets all environment variables from the user's login shell,
+/// with PATH getting special handling via get_enhanced_path().
+fn apply_user_shell_env(cmd: &mut Command) {
+    let shell_env = get_user_shell_env();
+
+    // Apply all environment variables from the user's shell
+    for (key, value) in shell_env.iter() {
+        // Skip PATH - we handle it specially with get_enhanced_path()
+        if key == "PATH" {
+            continue;
+        }
+        cmd.env(key, value);
+    }
+
+    // Always set the enhanced PATH
+    cmd.env("PATH", get_enhanced_path());
 }
 
 pub struct ScriptService {
@@ -483,10 +750,11 @@ impl ScriptService {
             cmd.current_dir(wd);
         }
 
-        // Set enhanced PATH for production builds (GUI apps don't inherit shell PATH)
-        cmd.env("PATH", get_enhanced_path());
+        // Apply the user's full shell environment (PATH, FOUNDRY_PROFILE, etc.)
+        // This is critical for GUI apps on macOS which don't inherit shell environment
+        apply_user_shell_env(&mut cmd);
 
-        // Set user-specified environment variables
+        // Set user-specified environment variables (these override shell env)
         for (key, value) in &env_vars {
             cmd.env(key, value);
         }
@@ -672,10 +940,11 @@ impl ScriptService {
             cmd.current_dir(wd);
         }
 
-        // Set enhanced PATH for production builds (GUI apps don't inherit shell PATH)
-        cmd.env("PATH", get_enhanced_path());
+        // Apply the user's full shell environment (PATH, FOUNDRY_PROFILE, etc.)
+        // This is critical for GUI apps on macOS which don't inherit shell environment
+        apply_user_shell_env(&mut cmd);
 
-        // Set user-specified environment variables
+        // Set user-specified environment variables (these override shell env)
         for (key, value) in &env_vars {
             cmd.env(key, value);
         }
