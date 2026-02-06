@@ -1,4 +1,4 @@
-import { initOasis, type OasisInstance } from '@oasis/sdk';
+import { initOasis, type OasisInstance, type FeedbackCategory } from '@oasis/sdk';
 
 let oasisInstance: OasisInstance | null = null;
 
@@ -29,6 +29,78 @@ export function getOasis(): OasisInstance | null {
   } catch {
     // Silently fail if SDK init fails (e.g., invalid config)
     return null;
+  }
+}
+
+/** Returns true if the oasis env vars are configured. */
+export function isOasisConfigured(): boolean {
+  return !!(OASIS_API_KEY && OASIS_SERVER_URL);
+}
+
+/**
+ * Extract the app slug from the API key (format: pk_app-slug_randomchars).
+ */
+function extractAppSlug(apiKey: string): string {
+  const lastUnderscore = apiKey.lastIndexOf('_');
+  return apiKey.slice(3, lastUnderscore); // skip "pk_", stop before last "_random"
+}
+
+/**
+ * Submit feedback directly via HTTP, bypassing the SDK's internal queue
+ * so that errors actually propagate to the caller.
+ *
+ * Throws on any failure (network, server error, timeout).
+ */
+export async function submitFeedbackDirect(
+  category: FeedbackCategory,
+  message: string,
+  email?: string,
+): Promise<void> {
+  if (!OASIS_API_KEY || !OASIS_SERVER_URL) {
+    throw new Error('Oasis is not configured');
+  }
+
+  const appSlug = extractAppSlug(OASIS_API_KEY);
+  const url = `${OASIS_SERVER_URL}/sdk/${appSlug}/feedback`;
+
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 10_000);
+
+  try {
+    const res = await fetch(url, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-API-Key': OASIS_API_KEY,
+      },
+      body: JSON.stringify({
+        category,
+        message,
+        email,
+        appVersion: APP_VERSION,
+        platform: typeof navigator !== 'undefined' ? navigator.platform : 'unknown',
+        timestamp: new Date().toISOString(),
+      }),
+      signal: controller.signal,
+    });
+
+    if (!res.ok) {
+      const body = await res.json().catch(() => null);
+      const serverMsg = body?.error?.message || `Server responded with ${res.status}`;
+      throw new Error(serverMsg);
+    }
+
+    const data = await res.json();
+    if (data.success === false) {
+      throw new Error(data.error?.message || 'Server rejected feedback');
+    }
+  } catch (error) {
+    if (error instanceof Error && error.name === 'AbortError') {
+      throw new Error('Request timed out');
+    }
+    throw error;
+  } finally {
+    clearTimeout(timeout);
   }
 }
 
