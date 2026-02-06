@@ -14,7 +14,8 @@
     "test:e2e": "playwright test",
     "version:patch": "./scripts/bump-version.sh patch",
     "version:minor": "./scripts/bump-version.sh minor",
-    "version:major": "./scripts/bump-version.sh major"
+    "version:major": "./scripts/bump-version.sh major",
+    "redeploy": "./scripts/redeploy.sh"
   },
   "dependencies": {
     "@aptos-labs/ts-sdk": "^5.2.1",
