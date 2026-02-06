@@ -40,7 +40,12 @@
     },
     "updater": {
       "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IEVCODhBQ0NDQjg0ODRFOTEKUldTUlRraTR6S3lJNnppUlYwcG9PZzJQcnRrTjM0VmhJVm42OWdJM0p0SHViaWFheWxtRWZBMW0K",
-      "endpoints": []
+      "endpoints": [
+        "https://oasis.dterminal.net/coco/update/{{target}}-{{arch}}/{{current_version}}"
+      ],
+      "windows": {
+        "installMode": "passive"
+      }
     }
   }
 }
