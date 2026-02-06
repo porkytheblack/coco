@@ -6,7 +6,7 @@ import {
   ArrowUpRight, ArrowDownLeft, Sun, Moon, Search, Send, Droplet,
   FileCode, Key, Files, GripVertical, Eye, EyeOff, AlertTriangle, CheckCircle,
   Home, ArrowLeft, Wallet, FolderOpen, MessageSquare, Palette, Bot, Eraser,
-  PlusCircle, FileText, Cog
+  PlusCircle, FileText, Cog, MessageCircleHeart
 } from 'lucide-react';
 import Image from 'next/image';
 import { TopBar, StatusBar } from '@/components/layout';
@@ -22,7 +22,7 @@ import { EnvVarList } from '@/components/env';
 import { WorkflowList, CreateWorkflowModal, WorkflowBuilder } from '@/components/workflows';
 import { useWorkflows, useWorkflow, useCreateWorkflow, useUpdateWorkflow, useRunWorkflow } from '@/hooks/use-workflows';
 import { useScripts, useGetWalletPrivateKey } from '@/hooks';
-import { useChainStore, useWalletStore, useWorkspaceStore, useToastStore, useThemeStore, useAIStore, useCommandStore } from '@/stores';
+import { useChainStore, useWalletStore, useWorkspaceStore, useToastStore, useThemeStore, useAIStore, useCommandStore, useFeedbackStore } from '@/stores';
 import type { Command } from '@/stores/command-store';
 import { useRouter } from '@/contexts';
 import { openExternal } from '@/lib/tauri/commands';
@@ -110,6 +110,7 @@ export default function AppPage() {
 
   // Command palette
   const { registerCommands, unregisterCommands, openPalette } = useCommandStore();
+  const { openDialog: openFeedback } = useFeedbackStore();
 
   // Command palette handler
   const handleCommandPalette = useCallback(() => {
@@ -191,6 +192,16 @@ export default function AppPage() {
         execute: clearChat,
         when: () => aiSettings.enabled,
       },
+
+      // Feedback command
+      {
+        id: 'actions.send-feedback',
+        name: 'Send Feedback',
+        description: 'Report a bug, request a feature, or share feedback',
+        icon: MessageCircleHeart,
+        category: 'actions',
+        execute: openFeedback,
+      },
     ];
 
     registerCommands(globalCommands);
@@ -198,7 +209,7 @@ export default function AppPage() {
     return () => {
       unregisterCommands(globalCommands.map((c) => c.id));
     };
-  }, [navigate, toggleMode, mode, aiSettings.enabled, clearChat, registerCommands, unregisterCommands, allThemes, setTheme]);
+  }, [navigate, toggleMode, mode, aiSettings.enabled, clearChat, registerCommands, unregisterCommands, allThemes, setTheme, openFeedback]);
 
   // Register view-specific commands
   useEffect(() => {
