@@ -31,3 +31,7 @@ export {
   type UpdateStatus,
   type UpdateInfo,
 } from './update-store';
+export {
+  useFeedbackStore,
+  type FeedbackStatus,
+} from './feedback-store';

@@ -116,16 +116,11 @@ export async function checkForUpdates(): Promise<void> {
       // No update available - go back to idle
       useUpdateStore.setState({ status: 'idle', lastChecked: Date.now() });
     }
-  } catch (error) {
-    // Silently fail in non-Tauri environments (e.g., browser dev mode)
-    const message = error instanceof Error ? error.message : 'Failed to check for updates';
-
-    // If endpoints are empty or not configured, just go idle instead of showing an error
-    if (message.includes('empty') || message.includes('endpoint') || message.includes('url')) {
-      useUpdateStore.setState({ status: 'idle', lastChecked: Date.now() });
-    } else {
-      store.setError(message);
-    }
+  } catch {
+    // Silently fail - only show update UI when an update is actually found.
+    // Errors during checking (network issues, non-Tauri env, misconfigured endpoints, etc.)
+    // should never surface to the user.
+    useUpdateStore.setState({ status: 'idle', lastChecked: Date.now() });
   }
 }
 

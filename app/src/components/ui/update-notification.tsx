@@ -46,7 +46,9 @@ export function UpdateNotification() {
     };
   }, []);
 
-  // Auto-dismiss errors after 10 seconds
+  // Auto-dismiss download/install errors after 10 seconds
+  // Note: Update *check* errors are silenced entirely in the store.
+  // Only download/install errors reach 'error' status now.
   useEffect(() => {
     if (status === 'error') {
       const timer = setTimeout(() => {
