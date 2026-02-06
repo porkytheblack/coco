@@ -4,6 +4,30 @@ import { getOasis } from '@/lib/oasis';
 
 export type FeedbackStatus = 'idle' | 'submitting' | 'success' | 'error';
 
+const LOCAL_FEEDBACK_KEY = 'coco-pending-feedback';
+
+interface LocalFeedbackEntry {
+  category: FeedbackCategory;
+  message: string;
+  email?: string;
+  timestamp: string;
+}
+
+/**
+ * Save feedback to localStorage when oasis is not configured.
+ * These can be flushed later once the service is available.
+ */
+function saveLocally(category: FeedbackCategory, message: string, email?: string): void {
+  try {
+    const existing: LocalFeedbackEntry[] = JSON.parse(localStorage.getItem(LOCAL_FEEDBACK_KEY) || '[]');
+    existing.push({ category, message, email, timestamp: new Date().toISOString() });
+    // Keep at most 50 entries
+    localStorage.setItem(LOCAL_FEEDBACK_KEY, JSON.stringify(existing.slice(-50)));
+  } catch {
+    // localStorage unavailable - ignore
+  }
+}
+
 interface FeedbackState {
   isOpen: boolean;
   status: FeedbackStatus;
@@ -29,7 +53,10 @@ export const useFeedbackStore = create<FeedbackState>((set) => ({
 
     const oasis = getOasis();
     if (!oasis) {
-      set({ status: 'error', errorMessage: 'Feedback service is not configured.' });
+      // Oasis not configured - save locally and treat as success.
+      // Feedback will be available for manual export or flushed when configured.
+      saveLocally(category, message, email);
+      set({ status: 'success' });
       return;
     }
 
