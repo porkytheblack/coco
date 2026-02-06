@@ -88,11 +88,20 @@ export const useUpdateStore = create<UpdateState>((set) => ({
     }),
 }));
 
+/** Returns true when running inside the Tauri webview (IPC bridge exists). */
+function isTauriEnv(): boolean {
+  return typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window;
+}
+
 /**
  * Check for updates using the Tauri updater plugin.
- * This is safe to call even outside of Tauri (it will silently fail).
+ * Skips entirely when not running inside Tauri (e.g. `next dev` in browser).
  */
 export async function checkForUpdates(): Promise<void> {
+  if (!isTauriEnv()) {
+    return; // Not in Tauri - nothing to check
+  }
+
   const store = useUpdateStore.getState();
 
   // Don't check if already downloading or ready
@@ -116,10 +125,12 @@ export async function checkForUpdates(): Promise<void> {
       // No update available - go back to idle
       useUpdateStore.setState({ status: 'idle', lastChecked: Date.now() });
     }
-  } catch {
+  } catch (error) {
     // Silently fail - only show update UI when an update is actually found.
-    // Errors during checking (network issues, non-Tauri env, misconfigured endpoints, etc.)
-    // should never surface to the user.
+    // Log to console so developers can diagnose real issues.
+    if (process.env.NODE_ENV === 'development') {
+      console.debug('[updater] check failed:', error instanceof Error ? error.message : error);
+    }
     useUpdateStore.setState({ status: 'idle', lastChecked: Date.now() });
   }
 }
