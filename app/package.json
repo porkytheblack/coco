@@ -1,6 +1,6 @@
 {
   "name": "coco",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "private": true,
   "scripts": {
     "dev": "next dev --turbopack",
@@ -11,7 +11,10 @@
     "tauri:dev": "tauri dev",
     "tauri:build": "tauri build",
     "test": "vitest",
-    "test:e2e": "playwright test"
+    "test:e2e": "playwright test",
+    "version:patch": "./scripts/bump-version.sh patch",
+    "version:minor": "./scripts/bump-version.sh minor",
+    "version:major": "./scripts/bump-version.sh major"
   },
   "dependencies": {
     "@aptos-labs/ts-sdk": "^5.2.1",
@@ -24,6 +27,7 @@
     "@tauri-apps/plugin-fs": "^2.0.0",
     "@tauri-apps/plugin-http": "^2.5.6",
     "@tauri-apps/plugin-shell": "^2.0.0",
+    "@tauri-apps/plugin-updater": "^2.10.0",
     "bs58": "^6.0.0",
     "clsx": "^2.1.0",
     "effect": "^3.19.15",

@@ -17,7 +17,8 @@ impl ConversationService {
     // Conversation operations
     // ========================================================================
 
-    /// List all conversations, optionally filtered by workspace
+    /// List all conversations, optionally filtered by workspace.
+    /// When workspace_id is None, returns ALL conversations across all workspaces.
     pub async fn list_conversations(&self, workspace_id: Option<&str>) -> Result<Vec<Conversation>> {
         let rows = if let Some(ws_id) = workspace_id {
             sqlx::query_as::<_, ConversationRow>(
@@ -28,7 +29,7 @@ impl ConversationService {
             .await
         } else {
             sqlx::query_as::<_, ConversationRow>(
-                "SELECT id, workspace_id, title, created_at, updated_at FROM conversations WHERE workspace_id IS NULL ORDER BY updated_at DESC",
+                "SELECT id, workspace_id, title, created_at, updated_at FROM conversations ORDER BY updated_at DESC",
             )
             .fetch_all(&self.db)
             .await

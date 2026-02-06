@@ -1,10 +1,16 @@
 'use client';
 
-import { useEffect, useState } from 'react';
-import { Settings, Plus, Play, Rocket, Copy, ExternalLink, Trash2, RefreshCw, ArrowUpRight, ArrowDownLeft, Sun, Moon, Search, Send, Droplet, FileCode, Key, Files, GripVertical, Eye, EyeOff, AlertTriangle, CheckCircle } from 'lucide-react';
+import { useEffect, useState, useCallback, useMemo } from 'react';
+import {
+  Settings, Plus, Play, Rocket, Copy, ExternalLink, Trash2, RefreshCw,
+  ArrowUpRight, ArrowDownLeft, Sun, Moon, Search, Send, Droplet,
+  FileCode, Key, Files, GripVertical, Eye, EyeOff, AlertTriangle, CheckCircle,
+  Home, ArrowLeft, Wallet, FolderOpen, MessageSquare, Palette, Bot, Eraser,
+  PlusCircle, FileText, Cog
+} from 'lucide-react';
 import Image from 'next/image';
-import { TopBar } from '@/components/layout';
-import { IconButton, Button, StatusIndicator, CocoLogo } from '@/components/ui';
+import { TopBar, StatusBar } from '@/components/layout';
+import { IconButton, Button, StatusIndicator, CocoLogo, ThemePicker } from '@/components/ui';
 import { WalletList, AddWalletModal, SendModal } from '@/components/wallets';
 import { WorkspaceGrid, CreateWorkspaceModal, WorkspaceSettingsModal } from '@/components/workspaces';
 import { AddChainModal, ChainSettingsModal, BlockchainGrid, NetworkSelectionModal } from '@/components/chains';
@@ -16,7 +22,8 @@ import { EnvVarList } from '@/components/env';
 import { WorkflowList, CreateWorkflowModal, WorkflowBuilder } from '@/components/workflows';
 import { useWorkflows, useWorkflow, useCreateWorkflow, useUpdateWorkflow, useRunWorkflow } from '@/hooks/use-workflows';
 import { useScripts, useGetWalletPrivateKey } from '@/hooks';
-import { useChainStore, useWalletStore, useWorkspaceStore, useToastStore, useThemeStore, useAIStore } from '@/stores';
+import { useChainStore, useWalletStore, useWorkspaceStore, useToastStore, useThemeStore, useAIStore, useCommandStore } from '@/stores';
+import type { Command } from '@/stores/command-store';
 import { useRouter } from '@/contexts';
 import { openExternal } from '@/lib/tauri/commands';
 import { clsx } from 'clsx';
@@ -95,17 +102,227 @@ export default function AppPage() {
   const runWorkflowMutation = useRunWorkflow();
 
   // AI and theme state
-  const { theme, toggleTheme } = useThemeStore();
-  const { settings: aiSettings } = useAIStore();
+  const { mode, toggleMode, themes: allThemes, setTheme } = useThemeStore();
+  const { settings: aiSettings, clearChat } = useAIStore();
   const [showAISettings, setShowAISettings] = useState(false);
   const [showCocoChat, setShowCocoChat] = useState(false);
   const [chainSearch, setChainSearch] = useState('');
+
+  // Command palette
+  const { registerCommands, unregisterCommands, openPalette } = useCommandStore();
+
+  // Command palette handler
+  const handleCommandPalette = useCallback(() => {
+    openPalette();
+  }, [openPalette]);
 
   // Load chains and recent workspaces on mount
   useEffect(() => {
     loadChains();
     loadRecentWorkspaces();
   }, [loadChains, loadRecentWorkspaces]);
+
+  // Register global commands that are always available
+  useEffect(() => {
+    const globalCommands: Command[] = [
+      // Navigation commands
+      {
+        id: 'nav.chains',
+        name: 'Go to Chains',
+        description: 'Navigate to the chains overview',
+        icon: Home,
+        category: 'navigation',
+        execute: () => navigate({ view: 'chains' }),
+      },
+      {
+        id: 'nav.back',
+        name: 'Go Back',
+        description: 'Navigate to the previous page',
+        icon: ArrowLeft,
+        category: 'navigation',
+        shortcut: 'Mod+[',
+        execute: () => window.history.back(),
+      },
+
+      // Settings commands
+      {
+        id: 'settings.toggle-theme',
+        name: 'Toggle Theme',
+        description: 'Switch between dark and light mode',
+        icon: mode === 'dark' ? Sun : Moon,
+        category: 'settings',
+        execute: toggleMode,
+      },
+      {
+        id: 'settings.ai',
+        name: 'AI Settings',
+        description: 'Configure AI assistant settings',
+        icon: Bot,
+        category: 'settings',
+        execute: () => setShowAISettings(true),
+      },
+      // Theme commands - one per theme for searchability
+      ...allThemes.map((theme) => ({
+        id: `settings.theme.${theme.id}`,
+        name: `Theme: ${theme.name}`,
+        description: `Switch to ${theme.name} (${theme.mode})`,
+        icon: Palette,
+        category: 'settings' as const,
+        execute: () => setTheme(theme.id),
+      })),
+
+      // AI commands
+      {
+        id: 'ai.chat',
+        name: 'Chat with Coco',
+        description: 'Open the AI chat assistant',
+        icon: MessageSquare,
+        category: 'ai',
+        shortcut: 'Mod+Shift+C',
+        execute: () => setShowCocoChat(true),
+        when: () => aiSettings.enabled,
+      },
+      {
+        id: 'ai.clear-chat',
+        name: 'Clear Chat',
+        description: 'Clear the AI chat history',
+        icon: Eraser,
+        category: 'ai',
+        execute: clearChat,
+        when: () => aiSettings.enabled,
+      },
+    ];
+
+    registerCommands(globalCommands);
+
+    return () => {
+      unregisterCommands(globalCommands.map((c) => c.id));
+    };
+  }, [navigate, toggleMode, mode, aiSettings.enabled, clearChat, registerCommands, unregisterCommands, allThemes, setTheme]);
+
+  // Register view-specific commands
+  useEffect(() => {
+    const viewCommands: Command[] = [];
+
+    if (route.view === 'chain-dashboard' && route.chainId) {
+      viewCommands.push(
+        {
+          id: 'action.create-wallet',
+          name: 'Create Wallet',
+          description: 'Add a new wallet to this chain',
+          icon: Wallet,
+          category: 'actions',
+          shortcut: 'Mod+Shift+W',
+          execute: () => setShowAddWallet(true),
+        },
+        {
+          id: 'action.create-workspace',
+          name: 'Create Workspace',
+          description: 'Create a new development workspace',
+          icon: FolderOpen,
+          category: 'actions',
+          shortcut: 'Mod+N',
+          execute: () => setShowCreateWorkspace(true),
+        },
+        {
+          id: 'settings.chain',
+          name: 'Chain Settings',
+          description: 'Configure chain settings',
+          icon: Cog,
+          category: 'settings',
+          execute: () => setShowChainSettings(true),
+        }
+      );
+
+      // Add navigation to chain dashboard
+      viewCommands.push({
+        id: 'nav.chain-dashboard',
+        name: 'Go to Chain Dashboard',
+        description: selectedChain?.name || 'Current chain dashboard',
+        icon: Rocket,
+        category: 'navigation',
+        execute: () => navigate({ view: 'chain-dashboard', chainId: route.chainId }),
+      });
+    }
+
+    if (route.view === 'workspace' && route.workspaceId) {
+      viewCommands.push(
+        {
+          id: 'action.add-contract',
+          name: 'Add Contract',
+          description: 'Add a new smart contract',
+          icon: FileText,
+          category: 'actions',
+          shortcut: 'Mod+Shift+C',
+          execute: () => setShowAddContract(true),
+        },
+        {
+          id: 'action.create-transaction',
+          name: 'Create Transaction',
+          description: 'Create a new transaction',
+          icon: PlusCircle,
+          category: 'actions',
+          shortcut: 'Mod+Shift+T',
+          execute: () => setShowCreateTransaction(true),
+        },
+        {
+          id: 'action.create-workflow',
+          name: 'Create Workflow',
+          description: 'Create a new automation workflow',
+          icon: Rocket,
+          category: 'actions',
+          execute: () => setShowCreateWorkflow(true),
+        },
+        {
+          id: 'settings.workspace',
+          name: 'Workspace Settings',
+          description: 'Configure workspace settings',
+          icon: Settings,
+          category: 'settings',
+          execute: () => setShowSettings(true),
+        },
+        {
+          id: 'nav.workspace',
+          name: 'Go to Workspace',
+          description: currentWorkspace?.name || 'Current workspace',
+          icon: FolderOpen,
+          category: 'navigation',
+          execute: () => navigate({ view: 'workspace', chainId: route.chainId, workspaceId: route.workspaceId }),
+        }
+      );
+
+      // Add chain dashboard navigation if we have a chain
+      if (route.chainId) {
+        viewCommands.push({
+          id: 'nav.chain-dashboard',
+          name: 'Go to Chain Dashboard',
+          description: selectedChain?.name || 'Current chain dashboard',
+          icon: Rocket,
+          category: 'navigation',
+          execute: () => navigate({ view: 'chain-dashboard', chainId: route.chainId }),
+        });
+      }
+    }
+
+    if (viewCommands.length > 0) {
+      registerCommands(viewCommands);
+    }
+
+    return () => {
+      if (viewCommands.length > 0) {
+        unregisterCommands(viewCommands.map((c) => c.id));
+      }
+    };
+  }, [
+    route.view,
+    route.chainId,
+    route.workspaceId,
+    selectedChain?.name,
+    currentWorkspace?.name,
+    navigate,
+    registerCommands,
+    unregisterCommands,
+  ]);
 
   // Load data based on view
   useEffect(() => {
@@ -201,18 +418,8 @@ export default function AppPage() {
                 />
               </div>
 
-              {/* Theme Toggle */}
-              <button
-                onClick={toggleTheme}
-                className="p-2.5 rounded-lg bg-coco-bg-secondary border border-coco-border-default hover:bg-coco-bg-tertiary transition-colors"
-                title={theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'}
-              >
-                {theme === 'dark' ? (
-                  <Sun className="w-5 h-5 text-coco-text-secondary" />
-                ) : (
-                  <Moon className="w-5 h-5 text-coco-text-secondary" />
-                )}
-              </button>
+              {/* Theme Picker */}
+              <ThemePicker />
 
               {/* AI Settings (Coco's Paw) */}
               <button
@@ -412,6 +619,8 @@ export default function AppPage() {
           isOpen={showCocoChat}
           onClose={() => setShowCocoChat(false)}
         />
+
+        <StatusBar breadcrumbs={[{ label: 'Chains' }]} />
       </div>
     );
   }
@@ -423,21 +632,18 @@ export default function AppPage() {
       navigate({ view: 'chains' });
     };
 
-    const getSubtitle = () => {
-      if (!selectedChain) return '';
-      const network = getNetworkName(selectedChain.rpcUrl);
-      return network
-        ? `${selectedChain.ecosystem.toUpperCase()} - ${network}`
-        : selectedChain.ecosystem.toUpperCase();
-    };
+    const chainDashboardBreadcrumbs = [
+      { label: 'Chains', onClick: () => navigate({ view: 'chains' }) },
+      { label: selectedChain?.name || 'Loading...' },
+    ];
 
     return (
       <div className="min-h-screen flex flex-col">
         <TopBar
-          title={selectedChain?.name || 'Loading...'}
-          subtitle={getSubtitle()}
+          breadcrumbs={chainDashboardBreadcrumbs}
           showBack
           onBack={handleBack}
+          onCommandPalette={handleCommandPalette}
           onCocoChat={() => setShowCocoChat(true)}
           actions={
             <IconButton
@@ -532,6 +738,13 @@ export default function AppPage() {
           onClose={() => setShowCocoChat(false)}
           context={{ ecosystem: selectedChain?.ecosystem, chainId: selectedChain?.id }}
         />
+
+        <StatusBar
+          breadcrumbs={[
+            { label: 'Chains', onClick: () => navigate({ view: 'chains' }) },
+            { label: selectedChain?.name || 'Chain' },
+          ]}
+        />
       </div>
     );
   }
@@ -548,6 +761,12 @@ export default function AppPage() {
     if (!wallet) {
       return <div>Loading wallet...</div>;
     }
+
+    const walletDetailBreadcrumbs = [
+      { label: 'Chains', onClick: () => navigate({ view: 'chains' }) },
+      { label: selectedChain?.name || '...', onClick: () => navigate({ view: 'chain-dashboard', chainId: route.chainId }) },
+      { label: wallet.name },
+    ];
 
     const formatBalance = (balance: string, decimals: number, symbol: string) => {
       const value = Number(balance) / Math.pow(10, decimals);
@@ -589,10 +808,10 @@ export default function AppPage() {
     return (
       <div className="min-h-screen flex flex-col">
         <TopBar
-          title={wallet.name}
-          subtitle={`${wallet.address.slice(0, 6)}...${wallet.address.slice(-4)}`}
+          breadcrumbs={walletDetailBreadcrumbs}
           showBack
           onBack={handleBack}
+          onCommandPalette={handleCommandPalette}
           onCocoChat={() => setShowCocoChat(true)}
           actions={
             <>
@@ -871,6 +1090,14 @@ export default function AppPage() {
             }}
           />
         )}
+
+        <StatusBar
+          breadcrumbs={[
+            { label: 'Chains', onClick: () => navigate({ view: 'chains' }) },
+            { label: selectedChain?.name || '...', onClick: () => navigate({ view: 'chain-dashboard', chainId: route.chainId }) },
+            { label: wallet.name },
+          ]}
+        />
       </div>
     );
   }
@@ -880,6 +1107,12 @@ export default function AppPage() {
     const handleBack = () => {
       navigate({ view: 'chain-dashboard', chainId: route.chainId });
     };
+
+    const workspaceBreadcrumbs = [
+      { label: 'Chains', onClick: () => navigate({ view: 'chains' }) },
+      { label: selectedChain?.name || '...', onClick: () => navigate({ view: 'chain-dashboard', chainId: route.chainId }) },
+      { label: currentWorkspace?.name || 'Loading...' },
+    ];
 
     const workspaceTabs = [
       { id: 'contracts' as const, label: 'Contracts', icon: Files },
@@ -891,9 +1124,10 @@ export default function AppPage() {
     return (
       <div className="h-screen flex flex-col overflow-hidden">
         <TopBar
-          title={currentWorkspace?.name || 'Loading...'}
+          breadcrumbs={workspaceBreadcrumbs}
           showBack
           onBack={handleBack}
+          onCommandPalette={handleCommandPalette}
           onCocoChat={() => setShowCocoChat(true)}
           actions={
             <>
@@ -1205,6 +1439,14 @@ export default function AppPage() {
           isOpen={showCocoChat}
           onClose={() => setShowCocoChat(false)}
           context={{ ecosystem: selectedChain?.ecosystem, chainId: selectedChain?.id }}
+        />
+
+        <StatusBar
+          breadcrumbs={[
+            { label: 'Chains', onClick: () => navigate({ view: 'chains' }) },
+            { label: selectedChain?.name || '...', onClick: () => navigate({ view: 'chain-dashboard', chainId: route.chainId }) },
+            { label: currentWorkspace?.name || 'Workspace' },
+          ]}
         />
       </div>
     );
