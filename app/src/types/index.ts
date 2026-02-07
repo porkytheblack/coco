@@ -154,9 +154,11 @@ export interface Balance {
 
 export interface TokenBalance {
   address: string;
+  name: string;
   symbol: string;
   decimals: number;
   balance: string;
+  logoUrl?: string;
 }
 
 export interface WalletBalance {

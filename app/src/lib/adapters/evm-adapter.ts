@@ -1,6 +1,6 @@
 import { ethers } from 'ethers';
 import type { ChainAdapter, CallResult, WalletBalance } from './types';
-import type { Contract, ContractFunction, WalletTransaction } from '@/types';
+import type { Contract, ContractFunction, TokenBalance, WalletTransaction } from '@/types';
 
 /**
  * Safely normalize an Ethereum address to its EIP-55 checksummed form.
@@ -293,7 +293,134 @@ export const evmAdapter: ChainAdapter = {
       return [];
     }
   },
+
+  async getTokenBalances(
+    rpcUrl: string,
+    address: string,
+    blockExplorerApiUrl?: string,
+    blockExplorerApiKey?: string
+  ): Promise<TokenBalance[]> {
+    const checksummedAddress = safeGetAddress(address);
+
+    if (!blockExplorerApiUrl) {
+      const apiUrl = detectBlockExplorerApi(rpcUrl);
+      if (!apiUrl) return [];
+      blockExplorerApiUrl = apiUrl;
+    }
+
+    try {
+      const chainId = await getChainId(rpcUrl);
+
+      // Use Etherscan V2 API to list all ERC-20 tokens for the address
+      let url = `https://api.etherscan.io/v2/api?chainid=${chainId}&module=account&action=tokenlist&address=${checksummedAddress}`;
+      if (blockExplorerApiKey) {
+        url += `&apikey=${blockExplorerApiKey}`;
+      }
+
+      const response = await fetch(url);
+      const data = await response.json();
+
+      if (data.status !== '1' || !data.result || !Array.isArray(data.result)) {
+        // Fallback: try tokentx to discover tokens, then call balanceOf
+        return await getTokenBalancesFallback(rpcUrl, checksummedAddress, chainId, blockExplorerApiKey);
+      }
+
+      return data.result
+        .filter((token: EtherscanToken) => token.balance && token.balance !== '0')
+        .map((token: EtherscanToken) => ({
+          address: token.contractAddress,
+          name: token.name || 'Unknown Token',
+          symbol: token.symbol || '???',
+          decimals: parseInt(token.decimals, 10) || 18,
+          balance: token.balance,
+          logoUrl: undefined,
+        }));
+    } catch (error) {
+      console.error('[getTokenBalances] Failed to fetch:', error);
+      return [];
+    }
+  },
 };
+
+// Etherscan token list response type
+interface EtherscanToken {
+  contractAddress: string;
+  name: string;
+  symbol: string;
+  decimals: string;
+  balance: string;
+}
+
+// Etherscan token transfer response type
+interface EtherscanTokenTx {
+  contractAddress: string;
+  tokenName: string;
+  tokenSymbol: string;
+  tokenDecimal: string;
+}
+
+// Fallback: discover tokens via tokentx, then call balanceOf on each
+async function getTokenBalancesFallback(
+  rpcUrl: string,
+  address: string,
+  chainId: number,
+  apiKey?: string
+): Promise<TokenBalance[]> {
+  try {
+    let url = `https://api.etherscan.io/v2/api?chainid=${chainId}&module=account&action=tokentx&address=${address}&startblock=0&endblock=99999999&page=1&offset=100&sort=desc`;
+    if (apiKey) url += `&apikey=${apiKey}`;
+
+    const response = await fetch(url);
+    const data = await response.json();
+
+    if (data.status !== '1' || !Array.isArray(data.result)) return [];
+
+    // Dedupe by contract address
+    const seen = new Set<string>();
+    const tokens: { address: string; name: string; symbol: string; decimals: number }[] = [];
+    for (const tx of data.result as EtherscanTokenTx[]) {
+      const addr = tx.contractAddress.toLowerCase();
+      if (!seen.has(addr)) {
+        seen.add(addr);
+        tokens.push({
+          address: tx.contractAddress,
+          name: tx.tokenName || 'Unknown Token',
+          symbol: tx.tokenSymbol || '???',
+          decimals: parseInt(tx.tokenDecimal, 10) || 18,
+        });
+      }
+    }
+
+    // Call balanceOf for each token
+    const provider = new ethers.JsonRpcProvider(rpcUrl);
+    const erc20Abi = ['function balanceOf(address) view returns (uint256)'];
+    const results: TokenBalance[] = [];
+
+    const balancePromises = tokens.map(async (token) => {
+      try {
+        const contract = new ethers.Contract(token.address, erc20Abi, provider);
+        const balance: bigint = await contract.balanceOf(address);
+        if (balance > 0n) {
+          results.push({
+            address: token.address,
+            name: token.name,
+            symbol: token.symbol,
+            decimals: token.decimals,
+            balance: balance.toString(),
+          });
+        }
+      } catch {
+        // Skip tokens that fail
+      }
+    });
+
+    await Promise.all(balancePromises);
+    return results;
+  } catch (error) {
+    console.error('[getTokenBalancesFallback] Failed:', error);
+    return [];
+  }
+}
 
 // Etherscan API response type
 interface EtherscanTx {

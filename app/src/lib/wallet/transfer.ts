@@ -5,7 +5,7 @@ import { ethers } from 'ethers';
 import { Connection, PublicKey, SystemProgram, Transaction, Keypair, LAMPORTS_PER_SOL, sendAndConfirmTransaction } from '@solana/web3.js';
 import { Aptos, AptosConfig, Account, Ed25519PrivateKey, AccountAddress } from '@aptos-labs/ts-sdk';
 import bs58 from 'bs58';
-import type { Chain } from '@/types';
+import type { Chain, TokenBalance } from '@/types';
 import { getWalletPrivateKey } from '@/lib/tauri/commands';
 import { formatPriv, getNetworkFromRPC } from '../adapters/aptos-adapter';
 
@@ -14,16 +14,31 @@ interface SendTransactionParams {
   recipient: string;
   amount: string; // Human-readable amount (e.g., "0.1")
   chain: Chain;
+  token?: TokenBalance; // If provided, send this token instead of native currency
 }
 
 /**
  * Send a transaction using the appropriate SDK based on ecosystem
  */
 export async function sendTransaction(params: SendTransactionParams): Promise<string> {
-  const { walletId, recipient, amount, chain } = params;
+  const { walletId, recipient, amount, chain, token } = params;
 
   // Get the private key from the backend
   const privateKey = await getWalletPrivateKey(walletId);
+
+  // If sending a token, use token-specific transfer functions
+  if (token) {
+    switch (chain.ecosystem) {
+      case 'evm':
+        return sendEvmTokenTransaction(privateKey, recipient, amount, chain, token);
+      case 'solana':
+        return sendSolanaTokenTransaction(privateKey, recipient, amount, chain, token);
+      case 'aptos':
+        return sendAptosTokenTransaction(privateKey, recipient, amount, chain, token);
+      default:
+        throw new Error(`Unsupported ecosystem for token transfer: ${chain.ecosystem}`);
+    }
+  }
 
   switch (chain.ecosystem) {
     case 'evm':
@@ -156,5 +171,131 @@ async function sendAptosTransaction(
   // Wait for confirmation
   await aptos.waitForTransaction({ transactionHash: pendingTransaction.hash });
 
+  return pendingTransaction.hash;
+}
+
+/**
+ * Send ERC-20 token on EVM chains
+ */
+async function sendEvmTokenTransaction(
+  privateKey: string,
+  recipient: string,
+  amount: string,
+  chain: Chain,
+  token: TokenBalance
+): Promise<string> {
+  if (!recipient || !ethers.isAddress(recipient)) {
+    throw new Error(`Invalid recipient address: ${recipient}`);
+  }
+  const normalizedRecipient = ethers.getAddress(recipient);
+
+  const provider = new ethers.JsonRpcProvider(chain.rpcUrl);
+  await provider.getNetwork();
+
+  const pk = privateKey.startsWith('0x') ? privateKey : `0x${privateKey}`;
+  const wallet = new ethers.Wallet(pk, provider);
+
+  // ERC-20 transfer ABI
+  const erc20Abi = ['function transfer(address to, uint256 amount) returns (bool)'];
+  const contract = new ethers.Contract(token.address, erc20Abi, wallet);
+
+  // Convert human-readable amount to token units
+  const tokenAmount = ethers.parseUnits(amount, token.decimals);
+
+  const tx = await contract.transfer(normalizedRecipient, tokenAmount);
+  const receipt = await tx.wait();
+
+  if (!receipt) {
+    throw new Error('Token transfer failed: no receipt');
+  }
+
+  return tx.hash;
+}
+
+/**
+ * Send SPL token on Solana
+ */
+async function sendSolanaTokenTransaction(
+  privateKey: string,
+  recipient: string,
+  amount: string,
+  chain: Chain,
+  token: TokenBalance
+): Promise<string> {
+  const connection = new Connection(chain.rpcUrl, 'confirmed');
+  const secretKey = bs58.decode(privateKey);
+  const fromKeypair = Keypair.fromSecretKey(secretKey);
+  const toPublicKey = new PublicKey(recipient);
+  const mintPublicKey = new PublicKey(token.address);
+
+  // Import SPL token functions dynamically
+  const {
+    getOrCreateAssociatedTokenAccount,
+    createTransferInstruction,
+    getAssociatedTokenAddress,
+  } = await import('@solana/spl-token');
+
+  // Get or create the sender's associated token account
+  const fromAta = await getAssociatedTokenAddress(mintPublicKey, fromKeypair.publicKey);
+
+  // Get or create the recipient's associated token account
+  const toAta = await getOrCreateAssociatedTokenAccount(
+    connection,
+    fromKeypair,
+    mintPublicKey,
+    toPublicKey
+  );
+
+  // Convert amount to token units
+  const tokenAmount = Math.floor(parseFloat(amount) * Math.pow(10, token.decimals));
+
+  const transaction = new Transaction().add(
+    createTransferInstruction(
+      fromAta,
+      toAta.address,
+      fromKeypair.publicKey,
+      tokenAmount
+    )
+  );
+
+  const signature = await sendAndConfirmTransaction(connection, transaction, [fromKeypair]);
+  return signature;
+}
+
+/**
+ * Send fungible asset on Aptos
+ */
+async function sendAptosTokenTransaction(
+  privateKey: string,
+  recipient: string,
+  _amount: string,
+  chain: Chain,
+  token: TokenBalance
+): Promise<string> {
+  const network = getNetworkFromRPC(chain.rpcUrl);
+  const config = new AptosConfig({ network });
+  const aptos = new Aptos(config);
+
+  const pkHex = formatPriv(privateKey);
+  const pk = new Ed25519PrivateKey(pkHex);
+  const account = Account.fromPrivateKey({ privateKey: pk });
+
+  // Convert amount to smallest unit
+  const tokenAmount = Math.floor(parseFloat(_amount) * Math.pow(10, token.decimals));
+
+  // Use transferCoinTransaction for standard coin types
+  const transaction = await aptos.transferFungibleAsset({
+    sender: account,
+    amount: tokenAmount,
+    fungibleAssetMetadataAddress: token.address,
+    recipient: AccountAddress.fromString(recipient),
+  });
+
+  const pendingTransaction = await aptos.signAndSubmitTransaction({
+    signer: account,
+    transaction,
+  });
+
+  await aptos.waitForTransaction({ transactionHash: pendingTransaction.hash });
   return pendingTransaction.hash;
 }

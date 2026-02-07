@@ -2,7 +2,7 @@ import { Connection, PublicKey, LAMPORTS_PER_SOL, Keypair, Transaction, Versione
 import { AnchorProvider, Program, BN } from '@coral-xyz/anchor';
 import type { Idl } from '@coral-xyz/anchor';
 import type { ChainAdapter, CallResult, WalletBalance } from './types';
-import type { Contract, ContractFunction, WalletTransaction, AccountRequirement, PdaDefinition, PdaSeed } from '@/types';
+import type { Contract, ContractFunction, TokenBalance, WalletTransaction, AccountRequirement, PdaDefinition, PdaSeed } from '@/types';
 import bs58 from 'bs58';
 
 /**
@@ -646,7 +646,123 @@ export const solanaAdapter: ChainAdapter = {
       return [];
     }
   },
+
+  async getTokenBalances(
+    rpcUrl: string,
+    address: string,
+  ): Promise<TokenBalance[]> {
+    try {
+      const connection = new Connection(rpcUrl);
+      const publicKey = new PublicKey(address);
+
+      // Use getParsedTokenAccountsByOwner to get all SPL tokens
+      const tokenAccounts = await connection.getParsedTokenAccountsByOwner(
+        publicKey,
+        { programId: new PublicKey('TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA') }
+      );
+
+      const tokens: TokenBalance[] = [];
+
+      for (const { account } of tokenAccounts.value) {
+        const parsed = account.data.parsed;
+        if (parsed?.info?.tokenAmount) {
+          const amount = parsed.info.tokenAmount;
+          // Skip zero balances
+          if (amount.uiAmount === 0 || amount.amount === '0') continue;
+
+          const mint = parsed.info.mint as string;
+          tokens.push({
+            address: mint,
+            name: mint.slice(0, 8) + '...',
+            symbol: 'SPL',
+            decimals: amount.decimals ?? 9,
+            balance: amount.amount,
+          });
+        }
+      }
+
+      // Try to enrich with metadata from RPC (get mint info)
+      await enrichSolanaTokenMetadata(connection, tokens);
+
+      return tokens;
+    } catch (error) {
+      console.error('[getTokenBalances] Solana failed:', error);
+      return [];
+    }
+  },
 };
+
+/**
+ * Enrich SPL token metadata using the Metaplex token metadata program
+ * or Solana token list as a fallback
+ */
+async function enrichSolanaTokenMetadata(connection: Connection, tokens: TokenBalance[]): Promise<void> {
+  // Use the known Solana token list for well-known tokens
+  const KNOWN_TOKENS: Record<string, { name: string; symbol: string; logoUrl?: string }> = {
+    'EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v': { name: 'USD Coin', symbol: 'USDC', logoUrl: 'https://raw.githubusercontent.com/solana-labs/token-list/main/assets/mainnet/EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v/logo.png' },
+    'Es9vMFrzaCERmJfrF4H2FYD4KCoNkY11McCe8BenwNYB': { name: 'Tether USD', symbol: 'USDT', logoUrl: 'https://raw.githubusercontent.com/solana-labs/token-list/main/assets/mainnet/Es9vMFrzaCERmJfrF4H2FYD4KCoNkY11McCe8BenwNYB/logo.svg' },
+    'So11111111111111111111111111111111111111112': { name: 'Wrapped SOL', symbol: 'wSOL' },
+    'mSoLzYCxHdYgdzU16g5QSh3i5K3z3KZK7ytfqcJm7So': { name: 'Marinade staked SOL', symbol: 'mSOL' },
+    'DezXAZ8z7PnrnRJjz3wXBoRgixCa6xjnB7YaB1pPB263': { name: 'Bonk', symbol: 'BONK' },
+    'JUPyiwrYJFskUPiHa7hkeR8VUtAeFoSYbKedZNsDvCN': { name: 'Jupiter', symbol: 'JUP' },
+    '7vfCXTUXx5WJV5JADk17DUJ4ksgau7utNKj4b963voxs': { name: 'Ether (Wormhole)', symbol: 'ETH' },
+    'rndrizKT3MK1iimdxRdWabcF7Zg7AR5T4nud4EkHBof': { name: 'Render Token', symbol: 'RNDR' },
+  };
+
+  for (const token of tokens) {
+    const known = KNOWN_TOKENS[token.address];
+    if (known) {
+      token.name = known.name;
+      token.symbol = known.symbol;
+      if (known.logoUrl) token.logoUrl = known.logoUrl;
+    }
+  }
+
+  // For unknown tokens, try to fetch on-chain metadata via Metaplex
+  try {
+    const TOKEN_METADATA_PROGRAM = new PublicKey('metaqbxxUerdq28cj1RbAWkYQm3ybzjb6a8bt518x1s');
+    const unknownTokens = tokens.filter((t) => !KNOWN_TOKENS[t.address]);
+
+    for (const token of unknownTokens) {
+      try {
+        const mintPk = new PublicKey(token.address);
+        const [metadataPda] = PublicKey.findProgramAddressSync(
+          [Buffer.from('metadata'), TOKEN_METADATA_PROGRAM.toBuffer(), mintPk.toBuffer()],
+          TOKEN_METADATA_PROGRAM
+        );
+        const accountInfo = await connection.getAccountInfo(metadataPda);
+        if (accountInfo?.data) {
+          // Parse basic metadata (name starts at offset 65, symbol after name)
+          const data = accountInfo.data;
+          const nameLen = data.readUInt32LE(65);
+          if (nameLen > 0 && nameLen < 100) {
+            const name = data.slice(69, 69 + nameLen).toString('utf8').replace(/\0/g, '').trim();
+            if (name) token.name = name;
+          }
+          const symbolOffset = 69 + nameLen;
+          const symbolLen = data.readUInt32LE(symbolOffset);
+          if (symbolLen > 0 && symbolLen < 20) {
+            const symbol = data.slice(symbolOffset + 4, symbolOffset + 4 + symbolLen).toString('utf8').replace(/\0/g, '').trim();
+            if (symbol) token.symbol = symbol;
+          }
+          const uriOffset = symbolOffset + 4 + symbolLen;
+          const uriLen = data.readUInt32LE(uriOffset);
+          if (uriLen > 0 && uriLen < 500) {
+            const uri = data.slice(uriOffset + 4, uriOffset + 4 + uriLen).toString('utf8').replace(/\0/g, '').trim();
+            if (uri && uri.startsWith('http')) {
+              // The URI points to a JSON with an image field - store for potential future fetching
+              // We won't fetch it here to avoid performance issues
+            }
+          }
+        }
+      } catch {
+        // Skip tokens that fail metadata lookup
+      }
+    }
+  } catch {
+    // Metadata enrichment is best-effort
+  }
+}
 
 function formatSolanaType(type: unknown): string {
   if (typeof type === 'string') return type;

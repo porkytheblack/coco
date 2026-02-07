@@ -1,4 +1,4 @@
-import type { Contract, ContractFunction, Ecosystem, WalletTransaction } from '@/types';
+import type { Contract, ContractFunction, Ecosystem, TokenBalance, WalletTransaction } from '@/types';
 
 export interface CallResult {
   success: boolean;
@@ -62,4 +62,12 @@ export interface ChainAdapter {
     blockExplorerApiUrl?: string,
     blockExplorerApiKey?: string
   ): Promise<WalletTransaction[]>;
+
+  // Get all token balances for a wallet
+  getTokenBalances(
+    rpcUrl: string,
+    address: string,
+    blockExplorerApiUrl?: string,
+    blockExplorerApiKey?: string
+  ): Promise<TokenBalance[]>;
 }
