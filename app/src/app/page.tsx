@@ -1026,6 +1026,7 @@ export default function AppPage() {
                     >
                       <div className="flex items-center gap-3 min-w-0">
                         {token.logoUrl ? (
+                          /* eslint-disable-next-line @next/next/no-img-element */
                           <img
                             src={token.logoUrl}
                             alt={token.symbol}

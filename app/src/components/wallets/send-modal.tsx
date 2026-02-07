@@ -168,6 +168,7 @@ export function SendModal({
         {token && (
           <div className="flex items-center gap-2 bg-coco-accent/10 border border-coco-accent/20 rounded-lg p-2.5">
             {token.logoUrl ? (
+              /* eslint-disable-next-line @next/next/no-img-element */
               <img
                 src={token.logoUrl}
                 alt={token.symbol}

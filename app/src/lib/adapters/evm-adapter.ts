@@ -400,7 +400,7 @@ async function getTokenBalancesFallback(
       try {
         const contract = new ethers.Contract(token.address, erc20Abi, provider);
         const balance: bigint = await contract.balanceOf(address);
-        if (balance > 0n) {
+        if (balance > BigInt(0)) {
           results.push({
             address: token.address,
             name: token.name,
