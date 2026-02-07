@@ -47,12 +47,13 @@ export default function AppPage() {
   const [showChainSettings, setShowChainSettings] = useState(false);
 
   // Chain dashboard state
-  const { wallets, loadWallets, createWallet, importWallet, deleteWallet, refreshBalance, walletTransactions, loadWalletTransactions, selectedWallet, selectWallet } = useWalletStore();
+  const { wallets, loadWallets, createWallet, importWallet, deleteWallet, refreshBalance, walletTransactions, loadWalletTransactions, tokenBalances, isLoadingTokens, loadTokenBalances, selectedWallet, selectWallet } = useWalletStore();
   const { workspaces, loadWorkspaces, createWorkspace } = useWorkspaceStore();
   const [showAddWallet, setShowAddWallet] = useState(false);
   const [showCreateWorkspace, setShowCreateWorkspace] = useState(false);
   const [copiedAddress, setCopiedAddress] = useState(false);
   const [showSendModal, setShowSendModal] = useState(false);
+  const [sendToken, setSendToken] = useState<import('@/types').TokenBalance | null>(null);
   const [showExportKey, setShowExportKey] = useState(false);
   const [exportedPrivateKey, setExportedPrivateKey] = useState<string | null>(null);
   const [showPrivateKey, setShowPrivateKey] = useState(false);
@@ -81,6 +82,8 @@ export default function AppPage() {
 
   // Transaction reordering state
   const [draggedTxIndex, setDraggedTxIndex] = useState<number | null>(null);
+  // Transaction contract filter
+  const [txContractFilter, setTxContractFilter] = useState<string | null>(null);
 
   // Workspace modals state
   const [showAddContract, setShowAddContract] = useState(false);
@@ -88,6 +91,8 @@ export default function AppPage() {
   const [contractToEdit, setContractToEdit] = useState<typeof contracts[0] | null>(null);
   const [showSettings, setShowSettings] = useState(false);
   const [showCreateTransaction, setShowCreateTransaction] = useState(false);
+  const [prefillContractId, setPrefillContractId] = useState<string | undefined>(undefined);
+  const [prefillFunctionName, setPrefillFunctionName] = useState<string | undefined>(undefined);
   const [selectedContract, setSelectedContract] = useState<typeof contracts[0] | null>(null);
   const [workspaceTab, setWorkspaceTab] = useState<'contracts' | 'scripts' | 'env' | 'workflows'>('contracts');
   const [showCreateWorkflow, setShowCreateWorkflow] = useState(false);
@@ -368,12 +373,13 @@ export default function AppPage() {
     setWorkspaceTab('contracts');
   }, [route.workspaceId]);
 
-  // Load wallet transactions when viewing wallet detail
+  // Load wallet transactions and token balances when viewing wallet detail
   useEffect(() => {
     if (route.view === 'wallet-detail' && route.walletId) {
       loadWalletTransactions(route.walletId);
+      loadTokenBalances(route.walletId);
     }
-  }, [route.view, route.walletId, loadWalletTransactions]);
+  }, [route.view, route.walletId, loadWalletTransactions, loadTokenBalances]);
 
   // Handle activating a network from the modal
   const handleActivateNetwork = async (blockchain: BlockchainDefinition, network: NetworkDefinition) => {
@@ -896,7 +902,10 @@ export default function AppPage() {
               <Button
                 variant="primary"
                 size="sm"
-                onClick={() => setShowSendModal(true)}
+                onClick={() => {
+                  setSendToken(null);
+                  setShowSendModal(true);
+                }}
               >
                 <Send className="w-4 h-4 mr-2" />
                 Send
@@ -987,6 +996,72 @@ export default function AppPage() {
                 >
                   Hide Private Key
                 </Button>
+              </div>
+            )}
+          </div>
+
+          {/* Token Balances */}
+          <div className="bg-coco-bg-elevated border border-coco-border-subtle rounded-xl mb-6">
+            <div className="p-4 border-b border-coco-border-subtle flex items-center justify-between">
+              <h2 className="text-lg font-semibold text-coco-text-primary">Tokens</h2>
+              {isLoadingTokens && (
+                <RefreshCw className="w-4 h-4 text-coco-text-tertiary animate-spin" />
+              )}
+            </div>
+
+            {!isLoadingTokens && tokenBalances.length === 0 ? (
+              <div className="p-6 text-center">
+                <p className="text-coco-text-tertiary text-sm">No tokens found</p>
+              </div>
+            ) : (
+              <div className="divide-y divide-coco-border-subtle">
+                {tokenBalances.map((token) => {
+                  const formattedBalance = (Number(token.balance) / Math.pow(10, token.decimals)).toFixed(
+                    Math.min(token.decimals, 6)
+                  );
+                  return (
+                    <div
+                      key={token.address}
+                      className="p-4 hover:bg-coco-bg-secondary transition-colors flex items-center justify-between"
+                    >
+                      <div className="flex items-center gap-3 min-w-0">
+                        {token.logoUrl ? (
+                          <img
+                            src={token.logoUrl}
+                            alt={token.symbol}
+                            className="w-8 h-8 rounded-full flex-shrink-0"
+                            onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }}
+                          />
+                        ) : (
+                          <div className="w-8 h-8 rounded-full bg-coco-bg-tertiary flex items-center justify-center flex-shrink-0">
+                            <span className="text-xs font-bold text-coco-text-secondary">
+                              {token.symbol.slice(0, 2)}
+                            </span>
+                          </div>
+                        )}
+                        <div className="min-w-0">
+                          <p className="text-sm font-medium text-coco-text-primary truncate">{token.name}</p>
+                          <p className="text-xs text-coco-text-tertiary">{token.symbol}</p>
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-3">
+                        <p className="text-sm font-medium text-coco-text-primary text-right">
+                          {formattedBalance}
+                        </p>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => {
+                            setSendToken(token);
+                            setShowSendModal(true);
+                          }}
+                        >
+                          <Send className="w-3.5 h-3.5" />
+                        </Button>
+                      </div>
+                    </div>
+                  );
+                })}
               </div>
             )}
           </div>
@@ -1094,10 +1169,15 @@ export default function AppPage() {
             isOpen={showSendModal}
             wallet={wallet}
             chain={selectedChain}
-            onClose={() => setShowSendModal(false)}
+            token={sendToken}
+            onClose={() => {
+              setShowSendModal(false);
+              setSendToken(null);
+            }}
             onSuccess={(txHash) => {
               addToast({ type: 'success', title: 'Transaction sent', message: `TX: ${txHash.slice(0, 10)}...` });
               refreshBalance(wallet.id);
+              loadTokenBalances(wallet.id);
             }}
           />
         )}
@@ -1206,15 +1286,61 @@ export default function AppPage() {
                   <div className="p-3 border-b border-coco-border-subtle">
                     <h2 className="text-sm font-semibold text-coco-text-primary">Transactions</h2>
                   </div>
+
+                  {/* Contract filter tabbar */}
+                  {(() => {
+                    // Get unique contracts that have transactions
+                    const contractsWithTxs = contracts.filter((c) =>
+                      transactions.some((tx) => tx.contractId === c.id)
+                    );
+                    if (contractsWithTxs.length > 1) {
+                      return (
+                        <div className="flex gap-1 px-2 py-1.5 border-b border-coco-border-subtle overflow-x-auto flex-shrink-0">
+                          <button
+                            onClick={() => setTxContractFilter(null)}
+                            className={clsx(
+                              'px-2 py-1 text-xs rounded-md whitespace-nowrap transition-colors',
+                              txContractFilter === null
+                                ? 'bg-coco-accent text-white'
+                                : 'text-coco-text-secondary hover:bg-coco-bg-tertiary'
+                            )}
+                          >
+                            All
+                          </button>
+                          {contractsWithTxs.map((c) => (
+                            <button
+                              key={c.id}
+                              onClick={() => setTxContractFilter(c.id)}
+                              className={clsx(
+                                'px-2 py-1 text-xs rounded-md whitespace-nowrap transition-colors truncate max-w-[120px]',
+                                txContractFilter === c.id
+                                  ? 'bg-coco-accent text-white'
+                                  : 'text-coco-text-secondary hover:bg-coco-bg-tertiary'
+                              )}
+                              title={c.name}
+                            >
+                              {c.name}
+                            </button>
+                          ))}
+                        </div>
+                      );
+                    }
+                    return null;
+                  })()}
+
                   <div className="flex-1 overflow-y-auto">
-                    {transactions.map((tx, index) => (
+                    {transactions
+                      .filter((tx) => !txContractFilter || tx.contractId === txContractFilter)
+                      .map((tx) => {
+                        const originalIndex = transactions.indexOf(tx);
+                        return (
                       <div
                         key={tx.id}
                         draggable={true}
                         onDragStart={(e) => {
-                          setDraggedTxIndex(index);
+                          setDraggedTxIndex(originalIndex);
                           e.dataTransfer.effectAllowed = 'move';
-                          e.dataTransfer.setData('text/plain', String(index));
+                          e.dataTransfer.setData('text/plain', String(originalIndex));
                         }}
                         onDragOver={(e) => {
                           e.preventDefault();
@@ -1227,8 +1353,8 @@ export default function AppPage() {
                         onDrop={(e) => {
                           e.preventDefault();
                           e.currentTarget.classList.remove('bg-coco-accent/10');
-                          if (draggedTxIndex !== null && draggedTxIndex !== index) {
-                            reorderTransactions(draggedTxIndex, index);
+                          if (draggedTxIndex !== null && draggedTxIndex !== originalIndex) {
+                            reorderTransactions(draggedTxIndex, originalIndex);
                           }
                           setDraggedTxIndex(null);
                         }}
@@ -1243,7 +1369,7 @@ export default function AppPage() {
                           selectedTransaction?.id === tx.id
                             ? 'bg-coco-bg-tertiary border-l-2 border-l-coco-accent'
                             : 'hover:bg-coco-bg-secondary',
-                          draggedTxIndex === index && 'opacity-50'
+                          draggedTxIndex === originalIndex && 'opacity-50'
                         )}
                       >
                         <div className="cursor-grab active:cursor-grabbing p-1 text-coco-text-tertiary hover:text-coco-text-secondary">
@@ -1251,15 +1377,27 @@ export default function AppPage() {
                         </div>
                         <div className="flex items-center gap-2 flex-1 min-w-0">
                           <span className="w-2 h-2 rounded-full bg-coco-success flex-shrink-0" />
-                          <span className="text-sm font-medium text-coco-text-primary truncate">
-                            {tx.name || tx.id.slice(0, 10)}
-                          </span>
+                          <div className="min-w-0 flex-1">
+                            <span className="text-sm font-medium text-coco-text-primary truncate block">
+                              {tx.name || tx.id.slice(0, 10)}
+                            </span>
+                            {tx.contract && txContractFilter === null && contracts.length > 1 && (
+                              <span className="text-[10px] text-coco-text-tertiary truncate block">
+                                {tx.contract.name}
+                              </span>
+                            )}
+                          </div>
                         </div>
                       </div>
-                    ))}
+                        );
+                      })}
                   </div>
                   <button
-                    onClick={() => setShowCreateTransaction(true)}
+                    onClick={() => {
+                      setPrefillContractId(undefined);
+                      setPrefillFunctionName(undefined);
+                      setShowCreateTransaction(true);
+                    }}
                     className="flex-shrink-0 p-3 text-sm text-coco-accent hover:bg-coco-bg-secondary border-t border-coco-border-subtle"
                   >
                     + New transaction
@@ -1272,7 +1410,9 @@ export default function AppPage() {
                 {selectedContract ? (
                   <ContractPanel
                     contract={selectedContract}
-                    onCreateTransaction={() => {
+                    onCreateTransaction={(contractId, functionName) => {
+                      setPrefillContractId(contractId);
+                      setPrefillFunctionName(functionName);
                       setShowCreateTransaction(true);
                     }}
                     onEdit={(contract) => {
@@ -1440,7 +1580,13 @@ export default function AppPage() {
         <CreateTransactionModal
           isOpen={showCreateTransaction}
           contracts={contracts}
-          onClose={() => setShowCreateTransaction(false)}
+          initialContractId={prefillContractId}
+          initialFunctionName={prefillFunctionName}
+          onClose={() => {
+            setShowCreateTransaction(false);
+            setPrefillContractId(undefined);
+            setPrefillFunctionName(undefined);
+          }}
           onCreate={async (name, contractId, functionName) => {
             await createTransaction(name, contractId, functionName);
           }}

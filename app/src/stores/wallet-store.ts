@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import type { Wallet, WalletWithBalance, WalletTransaction, CreateWalletRequest, ImportWalletRequest, Chain } from '@/types';
+import type { Wallet, WalletWithBalance, WalletTransaction, TokenBalance, CreateWalletRequest, ImportWalletRequest, Chain } from '@/types';
 import * as tauri from '@/lib/tauri';
 import { getAdapter } from '@/lib/adapters';
 
@@ -7,6 +7,8 @@ interface WalletState {
   wallets: WalletWithBalance[];
   selectedWallet: WalletWithBalance | null;
   walletTransactions: WalletTransaction[];
+  tokenBalances: TokenBalance[];
+  isLoadingTokens: boolean;
   currentChain: Chain | null;
   isLoading: boolean;
   error: string | null;
@@ -21,6 +23,7 @@ interface WalletState {
   refreshBalance: (walletId: string) => Promise<void>;
   refreshAllBalances: () => Promise<void>;
   loadWalletTransactions: (walletId: string) => Promise<void>;
+  loadTokenBalances: (walletId: string) => Promise<void>;
 }
 
 // Mock data for development when not running in Tauri
@@ -69,6 +72,8 @@ export const useWalletStore = create<WalletState>((set, get) => ({
   wallets: [],
   selectedWallet: null,
   walletTransactions: [],
+  tokenBalances: [],
+  isLoadingTokens: false,
   currentChain: null,
   isLoading: false,
   error: null,
@@ -322,6 +327,30 @@ export const useWalletStore = create<WalletState>((set, get) => ({
       } else {
         set({ walletTransactions: [], isLoading: false, error: (error as Error).message });
       }
+    }
+  },
+
+  loadTokenBalances: async (walletId: string) => {
+    const { currentChain, wallets } = get();
+    const wallet = wallets.find((w) => w.id === walletId);
+    if (!wallet || !currentChain) {
+      set({ tokenBalances: [], isLoadingTokens: false });
+      return;
+    }
+
+    set({ isLoadingTokens: true });
+    try {
+      const adapter = getAdapter(currentChain.ecosystem);
+      const tokens = await adapter.getTokenBalances(
+        currentChain.rpcUrl,
+        wallet.address,
+        currentChain.blockExplorerApiUrl,
+        currentChain.blockExplorerApiKey
+      );
+      set({ tokenBalances: tokens, isLoadingTokens: false });
+    } catch (error) {
+      console.error('Failed to load token balances:', error);
+      set({ tokenBalances: [], isLoadingTokens: false });
     }
   },
 }));

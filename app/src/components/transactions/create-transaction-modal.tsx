@@ -20,6 +20,8 @@ interface CreateTransactionModalProps {
   isOpen: boolean;
   contracts: Contract[];
   workspaceId?: string;
+  initialContractId?: string;
+  initialFunctionName?: string;
   onClose: () => void;
   onCreate?: (name: string, contractId?: string, functionName?: string) => Promise<void>;
 }
@@ -28,6 +30,8 @@ export function CreateTransactionModal({
   isOpen,
   contracts,
   workspaceId,
+  initialContractId,
+  initialFunctionName,
   onClose,
   onCreate,
 }: CreateTransactionModalProps) {
@@ -51,16 +55,30 @@ export function CreateTransactionModal({
 
   const contractId = watch('contractId');
 
-  // Reset form when modal opens
+  // Reset form when modal opens, pre-filling if initial values are provided
   useEffect(() => {
     if (isOpen) {
-      reset({
-        name: '',
-        contractId: '',
-        functionName: '',
-      });
+      if (initialContractId && initialFunctionName) {
+        // Find the contract to generate a good default name
+        const contract = contracts.find((c) => c.id === initialContractId);
+        const defaultName = contract
+          ? `${contract.name}-${initialFunctionName}`
+          : initialFunctionName;
+
+        reset({
+          name: defaultName,
+          contractId: initialContractId,
+          functionName: initialFunctionName,
+        });
+      } else {
+        reset({
+          name: '',
+          contractId: initialContractId || '',
+          functionName: '',
+        });
+      }
     }
-  }, [isOpen, reset]);
+  }, [isOpen, reset, initialContractId, initialFunctionName, contracts]);
 
   // Get the selected contract and its functions
   const selectedContract = useMemo(() => {
@@ -73,10 +91,18 @@ export function CreateTransactionModal({
     return selectedContract.functions;
   }, [selectedContract]);
 
-  // Reset function when contract changes
+  // Reset function when contract changes (only for manual changes, not initial prefill)
   const handleContractChange = (newContractId: string) => {
     setValue('contractId', newContractId);
     setValue('functionName', '');
+    // Auto-generate name hint
+    const contract = contracts.find((c) => c.id === newContractId);
+    if (contract) {
+      const currentName = watch('name');
+      if (!currentName) {
+        setValue('name', contract.name);
+      }
+    }
   };
 
   const onSubmit = async (data: CreateTransactionInput) => {
@@ -108,11 +134,13 @@ export function CreateTransactionModal({
 
   const error = createTransaction.error?.message;
 
+  const isPrefilled = !!(initialContractId && initialFunctionName);
+
   return (
     <Modal
       isOpen={isOpen}
       onClose={handleClose}
-      title="New Transaction"
+      title={isPrefilled ? 'Create Transaction from Function' : 'New Transaction'}
       size="md"
       footer={
         <>
@@ -130,6 +158,15 @@ export function CreateTransactionModal({
       }
     >
       <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
+        {/* Show prefill info banner */}
+        {isPrefilled && selectedContract && (
+          <div className="bg-coco-accent/10 border border-coco-accent/20 rounded-lg p-3">
+            <p className="text-xs text-coco-accent font-medium">
+              Pre-filled from: {selectedContract.name}.{initialFunctionName}()
+            </p>
+          </div>
+        )}
+
         <Input
           label="Transaction Name"
           placeholder="mint-tokens"

@@ -1,6 +1,6 @@
 import { Aptos, AptosConfig, Network } from '@aptos-labs/ts-sdk';
 import type { ChainAdapter, CallResult, WalletBalance } from './types';
-import type { Chain, Contract, ContractFunction, MoveFunction, WalletTransaction } from '@/types';
+import type { Chain, Contract, ContractFunction, MoveFunction, TokenBalance, WalletTransaction } from '@/types';
 
 const OCTAS_PER_APT = 100_000_000;
 
@@ -343,6 +343,51 @@ export const aptosAdapter: ChainAdapter = {
       return results;
     } catch (error) {
       console.error('Failed to fetch Aptos transaction history:', error);
+      return [];
+    }
+  },
+
+  async getTokenBalances(
+    rpcUrl: string,
+    address: string,
+  ): Promise<TokenBalance[]> {
+    try {
+      const config = new AptosConfig({ network: getNetworkFromRPC(rpcUrl) });
+      const aptos = new Aptos(config);
+
+      // Get all coin balances for this account using the Aptos SDK
+      const resources = await aptos.getAccountCoinsData({
+        accountAddress: address,
+      });
+
+      const tokens: TokenBalance[] = [];
+
+      for (const coin of resources) {
+        // Skip the native APT coin (already shown as native balance)
+        const coinType = coin.asset_type || '';
+        if (coinType === '0x1::aptos_coin::AptosCoin') continue;
+
+        const amount = coin.amount;
+        if (!amount || Number(amount) === 0) continue;
+
+        // Parse the coin type to extract a readable name
+        // Format: 0xaddr::module::CoinType
+        const parts = coinType.split('::');
+        const moduleName = parts.length >= 2 ? parts[parts.length - 1] : coinType;
+
+        tokens.push({
+          address: coinType,
+          name: coin.metadata?.name || moduleName,
+          symbol: coin.metadata?.symbol || moduleName,
+          decimals: coin.metadata?.decimals ?? 8,
+          balance: String(amount),
+          logoUrl: coin.metadata?.icon_uri || undefined,
+        });
+      }
+
+      return tokens;
+    } catch (error) {
+      console.error('[getTokenBalances] Aptos failed:', error);
       return [];
     }
   },

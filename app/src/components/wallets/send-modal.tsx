@@ -5,7 +5,7 @@ import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import { Button, Input, Modal } from '@/components/ui';
-import type { WalletWithBalance, Chain } from '@/types';
+import type { WalletWithBalance, Chain, TokenBalance } from '@/types';
 import { sendTransaction } from '@/lib/wallet/transfer';
 import { trackWalletSend } from '@/stores/action-tracking-store';
 
@@ -26,6 +26,7 @@ interface SendModalProps {
   isOpen: boolean;
   wallet: WalletWithBalance;
   chain: Chain;
+  token?: TokenBalance | null;
   onClose: () => void;
   onSuccess: (txHash: string) => void;
 }
@@ -34,6 +35,7 @@ export function SendModal({
   isOpen,
   wallet,
   chain,
+  token,
   onClose,
   onSuccess,
 }: SendModalProps) {
@@ -69,6 +71,8 @@ export function SendModal({
     }
   };
 
+  const currencySymbol = token ? token.symbol : chain.nativeCurrency;
+
   const onSubmit = async (data: SendFundsInput) => {
     try {
       const txHash = await sendTransaction({
@@ -76,6 +80,7 @@ export function SendModal({
         recipient: data.recipient.trim(),
         amount: data.amount.trim(),
         chain,
+        token: token || undefined,
       });
 
       // Track successful wallet send for AI context
@@ -83,7 +88,7 @@ export function SendModal({
         walletName: wallet.name,
         recipient: data.recipient.trim(),
         amount: data.amount.trim(),
-        symbol: chain.nativeCurrency || 'ETH',
+        symbol: currencySymbol || 'ETH',
         success: true,
         txHash,
         chainId: chain.id,
@@ -100,7 +105,7 @@ export function SendModal({
         walletName: wallet.name,
         recipient: data.recipient.trim(),
         amount: data.amount.trim(),
-        symbol: chain.nativeCurrency || 'ETH',
+        symbol: currencySymbol || 'ETH',
         success: false,
         error: errorMessage,
         chainId: chain.id,
@@ -121,11 +126,13 @@ export function SendModal({
     return `${value.toFixed(4)} ${symbol}`;
   };
 
+  const title = token ? `Send ${token.symbol}` : 'Send Funds';
+
   return (
     <Modal
       isOpen={isOpen}
       onClose={handleClose}
-      title="Send Funds"
+      title={title}
       size="md"
       footer={
         <>
@@ -146,10 +153,38 @@ export function SendModal({
           <p className="text-xs text-coco-text-secondary font-mono">
             {wallet.address.slice(0, 10)}...{wallet.address.slice(-8)}
           </p>
-          <p className="text-xs text-coco-text-tertiary mt-1">
-            Balance: {formatBalance(wallet.balance.native, wallet.balance.nativeDecimals, wallet.balance.nativeSymbol)}
-          </p>
+          {token ? (
+            <p className="text-xs text-coco-text-tertiary mt-1">
+              Token Balance: {formatBalance(token.balance, token.decimals, token.symbol)}
+            </p>
+          ) : (
+            <p className="text-xs text-coco-text-tertiary mt-1">
+              Balance: {formatBalance(wallet.balance.native, wallet.balance.nativeDecimals, wallet.balance.nativeSymbol)}
+            </p>
+          )}
         </div>
+
+        {/* Token info badge */}
+        {token && (
+          <div className="flex items-center gap-2 bg-coco-accent/10 border border-coco-accent/20 rounded-lg p-2.5">
+            {token.logoUrl ? (
+              <img
+                src={token.logoUrl}
+                alt={token.symbol}
+                className="w-5 h-5 rounded-full"
+                onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }}
+              />
+            ) : (
+              <div className="w-5 h-5 rounded-full bg-coco-bg-tertiary flex items-center justify-center">
+                <span className="text-[10px] font-bold text-coco-text-secondary">
+                  {token.symbol.slice(0, 2)}
+                </span>
+              </div>
+            )}
+            <span className="text-sm font-medium text-coco-accent">{token.name}</span>
+            <span className="text-xs text-coco-text-tertiary">({token.symbol})</span>
+          </div>
+        )}
 
         <Input
           label="Recipient Address"
@@ -159,7 +194,7 @@ export function SendModal({
         />
 
         <Input
-          label={`Amount (${chain.nativeCurrency})`}
+          label={`Amount (${currencySymbol})`}
           placeholder="0.0"
           {...register('amount')}
           type="text"
