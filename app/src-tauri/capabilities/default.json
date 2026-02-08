@@ -18,6 +18,8 @@
     "fs:allow-exists",
     "fs:allow-write-file",
     "http:default",
+    "updater:default",
+    "process:allow-restart",
     {
       "identifier": "fs:allow-read-text-file",
       "allow": [{ "path": "**" }]
