@@ -138,7 +138,7 @@ export function ContractList({
       {!isCollapsed && (
         <>
           {contracts.length > 0 ? (
-            <div className="space-y-2 max-h-[50vh] overflow-y-auto ">
+            <div className="space-y-2 max-h-[30vh] overflow-y-auto">
               {contracts.map((contract) => (
                 <ContractCard
                   key={contract.id}

@@ -1296,7 +1296,7 @@ export default function AppPage() {
                     );
                     if (contractsWithTxs.length > 1) {
                       return (
-                        <div className="flex gap-1 px-2 py-1.5 border-b border-coco-border-subtle overflow-x-auto flex-shrink-0">
+                        <div className="flex gap-1 px-2 py-1.5 border-b border-coco-border-subtle overflow-x-auto flex-shrink-0 [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden">
                           <button
                             onClick={() => setTxContractFilter(null)}
                             className={clsx(
@@ -1313,7 +1313,7 @@ export default function AppPage() {
                               key={c.id}
                               onClick={() => setTxContractFilter(c.id)}
                               className={clsx(
-                                'px-2 py-1 text-xs rounded-md whitespace-nowrap transition-colors truncate max-w-[120px]',
+                                'px-2 py-1 text-xs rounded-md whitespace-nowrap transition-colors truncate max-w-[120px] flex-shrink-0',
                                 txContractFilter === c.id
                                   ? 'bg-coco-accent text-white'
                                   : 'text-coco-text-secondary hover:bg-coco-bg-tertiary'
