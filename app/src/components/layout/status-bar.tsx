@@ -137,7 +137,7 @@ export function StatusBar({ breadcrumbs = [], statusMessage }: StatusBarProps) {
             </span>
           )}
           <span className="text-coco-text-tertiary font-mono text-[10px]">
-            v0.1.5
+            v0.1.6
           </span>
         </div>
       </div>
