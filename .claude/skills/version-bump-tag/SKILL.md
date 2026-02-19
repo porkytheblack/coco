@@ -1,3 +1,8 @@
+---
+name: version-bump-tag
+description: Programmatically bump package versions, create git tags, push to remote, and handle redeployments. Use when users need to bump version, version bump, create tag, push tag, release version, increment version, patch version, minor version, major version, semver bump, tag and push, new release, redeploy, re-release, retrigger release, or handle a failed release.
+---
+
 # Version Bump and Tag Management
 
 This skill provides guidance for programmatically bumping package versions, creating git tags, and pushing them to trigger releases.
@@ -25,9 +30,9 @@ This project has a version bumping script. Use npm scripts for convenience:
 
 ```bash
 # From the app/ directory
-npm run version:patch   # 0.1.0 → 0.1.1
-npm run version:minor   # 0.1.0 → 0.2.0
-npm run version:major   # 0.1.0 → 1.0.0
+npm run version:patch   # 0.1.0 -> 0.1.1
+npm run version:minor   # 0.1.0 -> 0.2.0
+npm run version:major   # 0.1.0 -> 1.0.0
 
 # Then push to trigger release
 git push && git push --tags
@@ -52,9 +57,9 @@ Semantic versioning (semver) follows the pattern: `MAJOR.MINOR.PATCH`
 
 | Component | When to Increment | Example |
 |-----------|-------------------|---------|
-| **MAJOR** | Breaking changes / incompatible API changes | 1.0.0 → 2.0.0 |
-| **MINOR** | New features (backward compatible) | 1.0.0 → 1.1.0 |
-| **PATCH** | Bug fixes (backward compatible) | 1.0.0 → 1.0.1 |
+| **MAJOR** | Breaking changes / incompatible API changes | 1.0.0 -> 2.0.0 |
+| **MINOR** | New features (backward compatible) | 1.0.0 -> 1.1.0 |
+| **PATCH** | Bug fixes (backward compatible) | 1.0.0 -> 1.0.1 |
 
 ### Pre-release Versions
 
@@ -110,9 +115,9 @@ Different project types have different version files:
 
 ```bash
 # Built-in npm version command
-npm version patch  # 0.1.0 → 0.1.1
-npm version minor  # 0.1.0 → 0.2.0
-npm version major  # 0.1.0 → 1.0.0
+npm version patch  # 0.1.0 -> 0.1.1
+npm version minor  # 0.1.0 -> 0.2.0
+npm version major  # 0.1.0 -> 1.0.0
 
 # With message and no git tag
 npm version patch --no-git-tag-version

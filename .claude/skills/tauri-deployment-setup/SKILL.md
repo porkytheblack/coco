@@ -1,3 +1,8 @@
+---
+name: tauri-deployment-setup
+description: Setup GitHub workflows, version management, and Tauri configuration for deployment with Oasis update server. Use when users need help with setup deployment, github workflow, tauri release, version management, oasis server, update server, CI/CD setup, release workflow, code signing, or tauri config.
+---
+
 # Tauri Deployment Setup Guide
 
 This skill provides comprehensive guidance for setting up GitHub workflows, version management, and Tauri configuration for deployment, including integration with the Oasis update server.
@@ -497,11 +502,11 @@ For CI/CD:
 
 ```bash
 # 1. Bump version (creates commit + tag)
-npm run version:patch   # 0.1.0 → 0.1.1
+npm run version:patch   # 0.1.0 -> 0.1.1
 # or
-npm run version:minor   # 0.1.0 → 0.2.0
+npm run version:minor   # 0.1.0 -> 0.2.0
 # or
-npm run version:major   # 0.1.0 → 1.0.0
+npm run version:major   # 0.1.0 -> 1.0.0
 
 # 2. Push to trigger release
 git push && git push --tags

@@ -13,7 +13,7 @@ Comprehensive guide for setting up:
 - Code signing for macOS and Windows
 - Cloudflare R2 artifact storage
 
-**Trigger phrases:** "setup deployment", "github workflow", "tauri release", "version management"
+**Invoke:** `/tauri-deployment-setup` or ask about "setup deployment", "github workflow", "tauri release"
 
 ### 2. `oasis-server-setup`
 
@@ -24,7 +24,7 @@ Detailed guide for configuring the Oasis update server:
 - Feedback collection implementation
 - Update flow architecture
 
-**Trigger phrases:** "oasis setup", "update server", "crash reporting", "auto update"
+**Invoke:** `/oasis-server-setup` or ask about "oasis setup", "update server", "crash reporting"
 
 ### 3. `version-bump-tag`
 
@@ -37,7 +37,7 @@ Guide for programmatically bumping package versions and managing git tags:
 - Redeployments for failed releases
 - Using this project's bump-version.sh and redeploy.sh scripts
 
-**Trigger phrases:** "bump version", "create tag", "push tag", "release version", "redeploy", "failed release"
+**Invoke:** `/version-bump-tag` or ask about "bump version", "create tag", "release version", "redeploy"
 
 ## Usage
 
@@ -47,11 +47,28 @@ Reference these skills when setting up new Tauri applications or troubleshooting
 
 ```
 skills/
-├── README.md                           # This file
-├── tauri-deployment-setup.md           # Main deployment guide
-├── tauri-deployment-setup.skill.json   # Skill definition
-├── oasis-server-setup.md               # Oasis-specific guide
-├── oasis-server-setup.skill.json       # Skill definition
-├── version-bump-tag.md                 # Version bumping guide
-└── version-bump-tag.skill.json         # Skill definition
+├── README.md                              # This file
+├── tauri-deployment-setup/
+│   └── SKILL.md                           # Main skill with YAML frontmatter
+├── oasis-server-setup/
+│   └── SKILL.md                           # Main skill with YAML frontmatter
+└── version-bump-tag/
+    └── SKILL.md                           # Main skill with YAML frontmatter
 ```
+
+## SKILL.md Format
+
+Each skill uses the new directory-based format with YAML frontmatter:
+
+```yaml
+---
+name: skill-name
+description: What the skill does and when to use it. Include trigger phrases here.
+---
+
+# Skill Title
+
+Markdown content with instructions...
+```
+
+The `description` field is critical - it tells Claude when to automatically invoke the skill based on user requests.

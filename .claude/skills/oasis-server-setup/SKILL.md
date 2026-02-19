@@ -1,3 +1,8 @@
+---
+name: oasis-server-setup
+description: Setup Oasis update server for Tauri applications with crash reporting and feedback collection. Use when users need help with oasis setup, oasis server, update server, crash reporting, feedback collection, tauri updater, or auto update configuration.
+---
+
 # Oasis Update Server Setup Guide
 
 This guide covers the complete setup of the Oasis update server for Tauri applications, including server configuration, client SDK integration, and CI/CD pipeline setup.
@@ -34,19 +39,19 @@ Oasis is a self-hosted release management and analytics server specifically desi
 ### Architecture
 
 ```
-┌─────────────────┐     ┌─────────────────┐     ┌─────────────────┐
-│   Tauri App     │────▶│  Oasis Server   │────▶│   Storage (R2)  │
-│   + Oasis SDK   │     │                 │     │                 │
-└─────────────────┘     └─────────────────┘     └─────────────────┘
-        │                       │
-        │ Check for updates     │ Register releases
-        │ Submit crashes        │ Serve update manifests
-        │ Send feedback         │ Store analytics
-        ▼                       ▼
-┌─────────────────────────────────────────────────────────────────┐
-│                        GitHub Actions                            │
-│   Build → Sign → Upload to R2 → Register with Oasis             │
-└─────────────────────────────────────────────────────────────────┘
++------------------+     +------------------+     +------------------+
+|   Tauri App      |---->|  Oasis Server    |---->|   Storage (R2)   |
+|   + Oasis SDK    |     |                  |     |                  |
++------------------+     +------------------+     +------------------+
+        |                       |
+        | Check for updates     | Register releases
+        | Submit crashes        | Serve update manifests
+        | Send feedback         | Store analytics
+        v                       v
++------------------------------------------------------------------+
+|                        GitHub Actions                             |
+|   Build -> Sign -> Upload to R2 -> Register with Oasis            |
++------------------------------------------------------------------+
 ```
 
 ---
@@ -411,70 +416,70 @@ jobs:
 ### Client Update Check Flow
 
 ```
-┌─────────────────────────────────────────────────────────────────────┐
-│                         User's Desktop App                          │
-└─────────────────────────────────────────────────────────────────────┘
-                                  │
-                                  │ 1. check() called
-                                  ▼
-┌─────────────────────────────────────────────────────────────────────┐
-│ GET https://oasis.server.com/coco/update/darwin-aarch64/0.1.0      │
-└─────────────────────────────────────────────────────────────────────┘
-                                  │
-                                  │ 2. Oasis returns manifest
-                                  ▼
-┌─────────────────────────────────────────────────────────────────────┐
-│ {                                                                   │
-│   "version": "0.2.0",                                              │
-│   "url": "https://cdn.../Coco_0.2.0_aarch64.app.tar.gz",          │
-│   "signature": "dW50cnVzdGVk..."                                   │
-│ }                                                                   │
-└─────────────────────────────────────────────────────────────────────┘
-                                  │
-                                  │ 3. Download from CDN (R2)
-                                  ▼
-┌─────────────────────────────────────────────────────────────────────┐
-│ Download Coco_0.2.0_aarch64.app.tar.gz                             │
-│ Verify signature with embedded pubkey                               │
-│ Extract and install                                                  │
-└─────────────────────────────────────────────────────────────────────┘
-                                  │
-                                  │ 4. Relaunch
-                                  ▼
-┌─────────────────────────────────────────────────────────────────────┐
-│                         App v0.2.0 Running                          │
-└─────────────────────────────────────────────────────────────────────┘
++---------------------------------------------------------------------+
+|                         User's Desktop App                           |
++---------------------------------------------------------------------+
+                                  |
+                                  | 1. check() called
+                                  v
++---------------------------------------------------------------------+
+| GET https://oasis.server.com/coco/update/darwin-aarch64/0.1.0       |
++---------------------------------------------------------------------+
+                                  |
+                                  | 2. Oasis returns manifest
+                                  v
++---------------------------------------------------------------------+
+| {                                                                    |
+|   "version": "0.2.0",                                               |
+|   "url": "https://cdn.../Coco_0.2.0_aarch64.app.tar.gz",           |
+|   "signature": "dW50cnVzdGVk..."                                    |
+| }                                                                    |
++---------------------------------------------------------------------+
+                                  |
+                                  | 3. Download from CDN (R2)
+                                  v
++---------------------------------------------------------------------+
+| Download Coco_0.2.0_aarch64.app.tar.gz                              |
+| Verify signature with embedded pubkey                                |
+| Extract and install                                                  |
++---------------------------------------------------------------------+
+                                  |
+                                  | 4. Relaunch
+                                  v
++---------------------------------------------------------------------+
+|                         App v0.2.0 Running                           |
++---------------------------------------------------------------------+
 ```
 
 ### Release Publishing Flow
 
 ```
-┌─────────────────┐     ┌─────────────────┐     ┌─────────────────┐
-│  Developer      │     │  GitHub Actions │     │  Oasis Server   │
-└─────────────────┘     └─────────────────┘     └─────────────────┘
-        │                       │                       │
-        │ git push --tags       │                       │
-        │──────────────────────▶│                       │
-        │                       │                       │
-        │                       │ Build for all         │
-        │                       │ platforms             │
-        │                       │                       │
-        │                       │ Sign with:            │
-        │                       │ - Apple certs         │
-        │                       │ - Tauri privkey       │
-        │                       │                       │
-        │                       │ Upload to R2          │
-        │                       │ ───────────────────▶  │ CDN
-        │                       │                       │
-        │                       │ POST /api/releases    │
-        │                       │──────────────────────▶│
-        │                       │                       │
-        │                       │                       │ Store release
-        │                       │                       │ metadata
-        │                       │                       │
-        │                       │ Create GitHub         │
-        │                       │ Release               │
-        │                       │                       │
++------------------+     +------------------+     +------------------+
+|  Developer       |     |  GitHub Actions  |     |  Oasis Server    |
++------------------+     +------------------+     +------------------+
+        |                       |                       |
+        | git push --tags       |                       |
+        |---------------------->|                       |
+        |                       |                       |
+        |                       | Build for all         |
+        |                       | platforms             |
+        |                       |                       |
+        |                       | Sign with:            |
+        |                       | - Apple certs         |
+        |                       | - Tauri privkey       |
+        |                       |                       |
+        |                       | Upload to R2          |
+        |                       | ------------------->  | CDN
+        |                       |                       |
+        |                       | POST /api/releases    |
+        |                       |---------------------->|
+        |                       |                       |
+        |                       |                       | Store release
+        |                       |                       | metadata
+        |                       |                       |
+        |                       | Create GitHub         |
+        |                       | Release               |
+        |                       |                       |
 ```
 
 ---
