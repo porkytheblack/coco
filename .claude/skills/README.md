@@ -26,6 +26,19 @@ Detailed guide for configuring the Oasis update server:
 
 **Trigger phrases:** "oasis setup", "update server", "crash reporting", "auto update"
 
+### 3. `version-bump-tag`
+
+Guide for programmatically bumping package versions and managing git tags:
+- Pre-push validation (uncommitted changes, unpushed commits)
+- Semantic versioning (semver) guidelines
+- Version files across different project types (Node.js, Rust, Tauri)
+- Git tag creation and pushing
+- Complete release workflows
+- Redeployments for failed releases
+- Using this project's bump-version.sh and redeploy.sh scripts
+
+**Trigger phrases:** "bump version", "create tag", "push tag", "release version", "redeploy", "failed release"
+
 ## Usage
 
 Reference these skills when setting up new Tauri applications or troubleshooting deployment issues.
@@ -38,5 +51,7 @@ skills/
 ├── tauri-deployment-setup.md           # Main deployment guide
 ├── tauri-deployment-setup.skill.json   # Skill definition
 ├── oasis-server-setup.md               # Oasis-specific guide
-└── oasis-server-setup.skill.json       # Skill definition
+├── oasis-server-setup.skill.json       # Skill definition
+├── version-bump-tag.md                 # Version bumping guide
+└── version-bump-tag.skill.json         # Skill definition
 ```
