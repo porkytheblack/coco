@@ -1,0 +1,20 @@
+{
+  "name": "tauri-deployment-setup",
+  "description": "Setup GitHub workflows, version management, and Tauri configuration for deployment with Oasis update server",
+  "trigger": {
+    "patterns": [
+      "setup deployment",
+      "github workflow",
+      "tauri release",
+      "version management",
+      "oasis server",
+      "update server",
+      "CI/CD setup",
+      "release workflow",
+      "code signing",
+      "tauri config"
+    ]
+  },
+  "documentation": "./tauri-deployment-setup.md",
+  "tags": ["devrel", "deployment", "tauri", "github-actions", "oasis", "ci-cd"]
+}
