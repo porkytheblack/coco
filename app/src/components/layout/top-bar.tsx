@@ -31,9 +31,12 @@ export function TopBar({
   const { settings: aiSettings } = useAIStore();
 
   return (
-    <header className="h-12 pl-20 pr-4 border-b border-coco-border-subtle/50 flex items-center justify-between bg-coco-bg-primary backdrop-blur-sm drag-region">
+    <header className="h-12 pl-20 pr-4 border-b border-coco-border-subtle/50 flex items-center justify-between bg-coco-bg-primary backdrop-blur-sm relative">
+      {/* Drag region layer - sits behind interactive elements */}
+      <div className="absolute inset-0 drag-region" />
+
       {/* Left: Back button + Breadcrumbs */}
-      <div className="flex items-center gap-2 no-drag min-w-0 flex-1">
+      <div className="flex items-center gap-2 no-drag min-w-0 flex-1 relative z-10">
         {showBack && onBack && (
           <IconButton
             icon={<ArrowLeft className="w-4 h-4" />}
@@ -85,7 +88,7 @@ export function TopBar({
       {onCommandPalette && (
         <button
           onClick={onCommandPalette}
-          className="absolute left-1/2 -translate-x-1/2 flex items-center gap-2 px-3 py-1.5 w-[280px] bg-coco-bg-tertiary hover:bg-coco-bg-inset border border-coco-border-default hover:border-coco-border-strong rounded-lg transition-all no-drag group shadow-sm"
+          className="absolute left-1/2 -translate-x-1/2 z-10 flex items-center gap-2 px-3 py-1.5 w-[280px] bg-coco-bg-tertiary hover:bg-coco-bg-inset border border-coco-border-default hover:border-coco-border-strong rounded-lg transition-all no-drag group shadow-sm"
         >
           <Search className="w-4 h-4 text-coco-text-secondary group-hover:text-coco-text-primary transition-colors" />
           <span className="flex-1 text-sm text-coco-text-secondary text-left">Search commands...</span>
@@ -96,7 +99,7 @@ export function TopBar({
       )}
 
       {/* Right: Actions + AI Chat + Theme Picker */}
-      <div className="flex items-center gap-1 no-drag flex-shrink-0">
+      <div className="flex items-center gap-1 no-drag flex-shrink-0 relative z-10">
         {actions}
 
         {onCocoChat && aiSettings.enabled && (
